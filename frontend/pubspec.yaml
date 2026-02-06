@@ -1,0 +1,38 @@
+name: jobmatchai
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.0.0
+  cupertino_icons: ^1.0.8
+  url_launcher: ^6.3.0
+  flutter_dotenv: ^6.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_icons:
+  web:
+    generate: true
+    image_path: "assets/icon/icon.png"
+    background_color: "#hex_color"
+    theme_color: "#hex_color"
+  image_path: "assets/icon/icon.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon/
+    - .env
