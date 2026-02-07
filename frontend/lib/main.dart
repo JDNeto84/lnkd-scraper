@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/home_screen.dart';
 
 Future<void> main() async {
-  await dotenv.load(fileName: ".env");
   runApp(const JobMatchApp());
 }
 
@@ -53,7 +51,7 @@ class JobMatchApp extends StatelessWidget {
             elevation: 2,
           ),
         ),
-        cardTheme: const CardThemeData(
+        cardTheme: const CardTheme(
           color: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(

@@ -36,7 +36,7 @@ export class UserService {
     });
   }
 
-  async updatePreferences(userId: string, data: { keyword?: string; isRemote?: boolean }) {
+  async updatePreferences(userId: string, data: { keyword?: string; location?: string; isRemote?: boolean }) {
     return await prisma.user.update({
       where: { id: userId },
       data,

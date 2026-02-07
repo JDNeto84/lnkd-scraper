@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 
@@ -54,12 +53,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return chatId != null && chatId.toString().isNotEmpty;
   }
 
-  void _updatePreferences(String keyword, bool isRemote) async {
+  void _updatePreferences(String keyword, String location, bool isRemote) async {
     final userId = _user?['user']['id'];
     if (userId == null) return;
 
     try {
-      await _apiService.updatePreferences(userId, keyword, isRemote);
+      await _apiService.updatePreferences(userId, keyword, location, isRemote);
       _showSnackBar('Preferências atualizadas com sucesso!', isError: false);
       _loadUser();
     } catch (e) {
@@ -71,6 +70,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _showPreferencesDialog() {
     final keywordController = TextEditingController(text: _user?['user']['keyword'] ?? '');
+    final locationController = TextEditingController(text: _user?['user']['location'] ?? 'Brasil');
     bool isRemote = _user?['user']['isRemote'] ?? false;
     bool isSaving = false;
 
@@ -104,6 +104,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       fillColor: Colors.grey.shade50,
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: locationController,
+                    decoration: InputDecoration(
+                      labelText: 'Localização',
+                      hintText: 'Ex: Brasil, São Paulo',
+                      prefixIcon: const Icon(Icons.location_on),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   Container(
                     decoration: BoxDecoration(
@@ -120,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                       value: isRemote,
-                      activeThumbColor: Colors.green,
+                      activeColor: Colors.green,
                       onChanged: (val) => setState(() => isRemote = val),
                       secondary: Icon(
                         isRemote ? Icons.home_work : Icons.business,
@@ -139,7 +153,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   onPressed: isSaving ? null : () async {
                     setState(() => isSaving = true);
                     Navigator.pop(context);
-                    _updatePreferences(keywordController.text, isRemote);
+                    _updatePreferences(
+                      keywordController.text,
+                      locationController.text,
+                      isRemote,
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -161,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final userId = _user?['user']['id'];
     if (userId == null) return;
 
-    final botBaseUrl = dotenv.env['TELEGRAM_BOT_URL']!;
+    const botBaseUrl = String.fromEnvironment('TELEGRAM_BOT_URL');
     final botUrl = '$botBaseUrl?start=$userId';
     
     try {
@@ -296,6 +314,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                   avatar: const Icon(Icons.search, size: 18),
                                   label: Text(_user?['user']['keyword'] ?? 'Nenhum termo definido'),
                                   backgroundColor: Colors.blue.shade50,
+                                ),
+                                Chip(
+                                  avatar: const Icon(Icons.location_on, size: 18),
+                                  label: Text(_user?['user']['location'] ?? 'Brasil'),
+                                  backgroundColor: Colors.purple.shade50,
                                 ),
                                 if (_user?['user']['isRemote'] == true)
                                   Chip(

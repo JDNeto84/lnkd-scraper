@@ -9,14 +9,25 @@ async function main() {
   try {
     const user = await prisma.user.upsert({
       where: { email },
-      update: {},
+      update: {
+        // Atualiza preferências para garantir que o scraper funcione
+        keyword: 'developer',
+        location: 'Brasil',
+        isRemote: true,
+        isActive: true,
+      },
       create: {
         name: 'Test User',
         email,
         password: hashedPassword,
+        keyword: 'developer',
+        location: 'Brasil',
+        isRemote: true,
+        isActive: true,
       },
     });
     console.log('User ready:', user.email);
+    console.log('Preferences set: keyword=developer, location=Brasil, isRemote=true');
   } catch (e) {
     console.error(e);
   } finally {

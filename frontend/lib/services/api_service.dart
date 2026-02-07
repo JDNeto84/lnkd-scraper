@@ -1,11 +1,11 @@
 import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
   static String get baseUrl {
-    return dotenv.env['API_BASE_URL']!;
+    const url = String.fromEnvironment('API_BASE_URL');
+    return url;
   }
   
   final _storage = const FlutterSecureStorage();
@@ -36,7 +36,7 @@ class ApiService {
   }
 
   // User: Register
-  Future<void> register(String name, String email, String password) async {
+  Future<void> register(String name, String email, String password, String location) async {
     final response = await http.post(
       Uri.parse('$baseUrl/users/register'),
       headers: {'Content-Type': 'application/json'},
@@ -44,6 +44,7 @@ class ApiService {
         'name': name,
         'email': email,
         'password': password,
+        'location': location,
       }),
     );
 
@@ -67,13 +68,14 @@ class ApiService {
   }
 
   // User: Update Preferences
-  Future<void> updatePreferences(String userId, String keyword, bool isRemote) async {
+  Future<void> updatePreferences(String userId, String keyword, String location, bool isRemote) async {
     final headers = await _getHeaders();
     final response = await http.patch(
       Uri.parse('$baseUrl/users/$userId/preferences'),
       headers: headers,
       body: jsonEncode({
         'keyword': keyword,
+        'location': location,
         'isRemote': isRemote,
       }),
     );

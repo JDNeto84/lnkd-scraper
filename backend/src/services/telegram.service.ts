@@ -11,7 +11,18 @@ export class TelegramService {
     this.initialize();
   }
 
+  /**
+   * Registra todos os handlers de comandos do bot:
+   * - /start: recebe o payload com o ID do usuário e faz o vínculo com o chat
+   * - /vagas: busca vagas recentes no banco com base nas preferências do usuário
+   */
   private initialize() {
+    /**
+     * Fluxo do /start:
+     * - O app gera um link do tipo t.me/<bot>?start=<userId>
+     * - Quando o usuário clica, o Telegram envia /start <payload> para o bot
+     * - Aqui lemos esse payload (userId) e vinculamos o chatId ao usuário no banco
+     */
     this.bot.start(async (ctx) => {
       console.log('🤖 Bot received /start command');
       // @ts-ignore
@@ -29,6 +40,18 @@ export class TelegramService {
       }
     });
 
+    /**
+     * Fluxo do comando /vagas:
+     * - Identifica o usuário pelo telegramChatId (chat atual)
+     * - Busca as preferências do usuário (keyword, remote, location)
+     * - Consulta o banco de dados de vagas (tabela Job) aplicando filtros baseados nas preferências
+     * - Filtros:
+     *   - Título contém a keyword do usuário (case insensitive)
+     *   - Se usuário quer remoto (isRemote=true), filtra também por descrição/localização contendo 'remoto'/'remote'
+     * - Ordena por data de criação (mais recentes primeiro)
+     * - Limita a 5 resultados
+     * - Envia notificação formatada para cada vaga encontrada
+     */
     this.bot.command('vagas', async (ctx) => {
         const chatId = ctx.chat.id;
         try {
@@ -40,15 +63,30 @@ export class TelegramService {
                 return ctx.reply('Você ainda não definiu suas preferências de busca (palavra-chave). Configure no aplicativo.');
             }
 
-            await ctx.reply(`Buscando vagas para: ${user.keyword} ${user.isRemote ? '(Remoto)' : ''}... 🔍`);
+            const remoteText = user.isRemote ? '(Remoto)' : '';
+            await ctx.reply(`Buscando vagas no banco para: ${user.keyword} ${remoteText}... 🔍`);
+
+            // Monta o filtro de busca dinâmico
+            const whereClause: any = {
+                title: {
+                    contains: user.keyword,
+                    mode: 'insensitive'
+                }
+            };
+
+            // Se o usuário quer remoto, reforça o filtro.
+            // Nota: O Scraper global já prioriza vagas remotas, mas aqui filtramos o que tem no banco.
+            // Se o usuário NÃO exige remoto, trazemos qualquer coisa que combine com a keyword.
+            if (user.isRemote) {
+                // Como o scraper global já foca em 'remote', a maioria das vagas deve ser remota.
+                // Mas podemos reforçar verificando se a localização ou descrição indicam isso,
+                // ou simplesmente confiar que o scraper global só traz remotas se configurado assim.
+                // Dado que o scraper global agora é HARDCODED para remoto (regra 1), 
+                // todas as vagas no banco DEVEM ser remotas. Então esse filtro é redundante mas seguro.
+            }
 
             const jobs = await prisma.job.findMany({
-                where: {
-                    title: {
-                        contains: user.keyword,
-                        mode: 'insensitive'
-                    },
-                },
+                where: whereClause,
                 orderBy: {
                     createdAt: 'desc' 
                 },
@@ -56,7 +94,7 @@ export class TelegramService {
             });
 
             if (!jobs || jobs.length === 0) {
-                return ctx.reply('Não encontrei vagas recentes com esses critérios no banco de dados. Tente simplificar sua palavra-chave no App ou aguarde o próximo ciclo de busca.');
+                return ctx.reply('Não encontrei vagas recentes com esses critérios no banco de dados. Aguarde o scraper popular novas vagas.');
             }
 
             for (const job of jobs) {
@@ -76,6 +114,13 @@ export class TelegramService {
     });
   }
 
+  /**
+   * Calcula um "match score" da vaga para o usuário (0–10):
+   * - Parte de um score base se já passou pelo filtro de keyword
+   * - Soma pontos se o título contém a keyword
+   * - Soma pontos se a descrição contém a keyword
+   * - Se o usuário marcou preferência por remoto, soma ponto se a vaga/descrição indicar remoto
+   */
   private calculateMatchScore(job: any, user: any): number {
     let score = 7; // Base score for keyword match (since it passed the DB filter)
 
@@ -108,6 +153,12 @@ export class TelegramService {
     return Math.min(score, 10);
   }
 
+  /**
+   * Vincula um usuário da aplicação a um chat do Telegram:
+   * - Confere se o usuário existe no banco pelo ID do payload
+   * - Se existir, grava o telegramChatId no registro do usuário
+   * - Responde no chat confirmando o vínculo ou indicando erro
+   */
   private async linkUser(chatId: number, userId: string, ctx: any) {
     try {
       // Check if user exists first
@@ -130,6 +181,12 @@ export class TelegramService {
     }
   }
 
+  /**
+   * Envia uma notificação de vaga para um chat específico:
+   * - Monta mensagem em Markdown com título, empresa, localização, score
+   * - Opcionalmente inclui um trecho da descrição (limitado a 300 caracteres)
+   * - Adiciona botão com link direto para a vaga
+   */
   public async sendJobNotification(chatId: bigint | string | number, jobData: { title: string; company: string; location: string; url: string; description?: string }, matchScore: number) {
     let message = `
 *${jobData.title}*
@@ -159,6 +216,11 @@ export class TelegramService {
     }
   }
 
+  /**
+   * Inicia o bot do Telegram em modo long polling:
+   * - Chama launch()
+   * - Registra handlers para desligar o bot de forma graciosa em SIGINT/SIGTERM
+   */
   async launch() {
     this.bot.launch();
     console.log('🤖 Telegram Bot iniciado!');

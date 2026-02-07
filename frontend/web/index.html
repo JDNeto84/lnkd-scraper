@@ -14,14 +14,14 @@
     This is a placeholder for base href that will be replaced by the value of
     the `--base-href` argument provided to `flutter build`.
   -->
-  <base href="$FLUTTER_BASE_HREF">
+  <base href="/">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   
   <!-- Security: Content Security Policy (CSP) -->
-  <!-- Permite scripts do próprio domínio, avaliações inseguras (necessário para Flutter Web) e conexões para qualquer origem (devido a APIs dinâmicas) -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' *; font-src 'self' https: data:;">
+  <!-- Permite scripts do próprio domínio, CanvasKit hospedado no domínio do Flutter e conexões para qualquer origem (devido a APIs dinâmicas) -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' *; font-src 'self' https: data:;">
   
   <meta name="description" content="A new Flutter project.">
 

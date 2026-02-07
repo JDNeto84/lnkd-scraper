@@ -43,6 +43,7 @@ export class AuthController {
             plan: user.plan,
             telegramChatId: user.telegramChatId ? user.telegramChatId.toString() : null,
             keyword: user.keyword,
+            location: user.location,
             isRemote: user.isRemote
         }
     });

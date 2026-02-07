@@ -10,27 +10,30 @@ import { ScraperService } from './services/scraper.service';
 import cron from 'node-cron';
 import { PrismaClient } from '@prisma/client';
 
+// Cliente Prisma compartilhado para rotas, cron e serviços auxiliares
 const prisma = new PrismaClient();
 
-// Fix BigInt serialization for JSON
+// Ajuste global para serializar BigInt em JSON (por exemplo, telegramChatId)
+// Sem isso, qualquer resposta contendo BigInt quebraria o JSON.stringify
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
 };
 
+// Instância principal do servidor Fastify com logs habilitados
 const app = fastify({
   logger: true
 });
 
-// Add schema validator and serializer
+// Configura o Fastify para usar o Zod como validador/serializador de schemas
 app.setValidatorCompiler(validatorCompiler);
 app.setSerializerCompiler(serializerCompiler);
 
-// Register CORS
+// Libera CORS para qualquer origem (frontend web acessar a API)
 app.register(cors, {
   origin: true,
 });
 
-// Register Swagger
+// Registra a documentação OpenAPI/Swagger da API
 app.register(fastifySwagger, {
   openapi: {
     info: {
@@ -52,21 +55,35 @@ app.register(fastifySwagger, {
   transform: jsonSchemaTransform,
 });
 
+// Exposição da UI do Swagger em /docs
 app.register(fastifySwaggerUi, {
   routePrefix: '/docs',
 });
 
-// Register routes
+// Registra rotas de domínio
 app.register(userRoutes);
 app.register(authRoutes);
 
-// Rota manual para forçar o scraping
+// Endpoint para disparar o scraping manualmente via HTTP:
+// - Permite passar keyword/location e flags last24h/remote pela query string
 app.get('/api/scrape', async (request: any, reply) => {
   const scraper = new ScraperService();
-  const { keyword } = request.query as { keyword?: string };
+  const { keyword, location, last24h, remote } = request.query as {
+    keyword?: string;
+    location?: string;
+    last24h?: string;
+    remote?: string;
+  };
+  const last24hFlag = last24h !== 'false';
+  const remoteFlag = remote === 'true';
   
   try {
-    const result = await scraper.scrapeJobs(keyword);
+    const result = await scraper.scrapeJobs({
+      keyword,
+      location,
+      last24h: last24hFlag,
+      remote: remoteFlag,
+    });
     return reply.send({ message: 'Scraping executado', result });
   } catch (error) {
     request.log.error(error);
@@ -90,11 +107,11 @@ app.get('/api/jobs', async (request: any, reply) => {
     return jobs;
 });
 
-// Initialize Services
+// Inicialização de serviços auxiliares compartilhados
 const telegramService = process.env.TELEGRAM_TOKEN ? new TelegramService(process.env.TELEGRAM_TOKEN) : null;
 const scraperService = new ScraperService();
 
-// Start Telegram Bot
+// Inicializa o bot do Telegram, caso exista TELEGRAM_TOKEN configurado
 if (telegramService) {
   telegramService.launch().catch(err => {
     app.log.error(err, 'Failed to launch Telegram Bot');
@@ -103,17 +120,45 @@ if (telegramService) {
   app.log.warn('TELEGRAM_TOKEN not provided. Bot will not start.');
 }
 
-// Schedule Scraping Job (Every 30 minutes)
-cron.schedule('*/30 * * * *', async () => {
-  app.log.info('Running scheduled scraping task...');
+// Agenda a tarefa de scraping automático para rodar a cada 15 minutos:
+// - Busca vagas de forma ampla (sem keyword específica) para popular o banco
+// - Foca em vagas do Brasil, Remotas e das últimas 24h
+// - Limpa vagas antigas (mais de 25h) para manter frescor
+cron.schedule('*/15 * * * *', async () => {
+  app.log.info('Running global scheduled scraping task...');
   try {
-    await scraperService.scrapeJobs(); // Runs with default or logic to iterate users can be added later
-    app.log.info('Scraping task completed successfully.');
+    // 1) Executa scraping amplo (keyword vazia)
+    // O ScraperService já lida com filtros de idioma (Sem Inglês) e duplicatas
+    app.log.info(`Scraping broad search (empty keyword) for remote jobs in Brazil`);
+    
+    await scraperService.scrapeJobs({
+      keyword: '',   // Keyword vazia para buscar "qualquer vaga"
+      location: 'Brasil',
+      last24h: true, // Apenas últimas 24h
+      remote: true,  // Apenas Remoto
+    });
+
+    // 2) Limpa vagas antigas (mais de 25h) conforme regra de negócio
+    // Regra: "remove populated from 48 hours to 25 hours"
+    const cutoffDate = new Date(Date.now() - 25 * 60 * 60 * 1000);
+
+    const deleted = await prisma.job.deleteMany({
+      where: {
+        createdAt: {
+          lt: cutoffDate,
+        },
+      },
+    });
+
+    app.log.info(`Cleaned up ${deleted.count} old jobs (older than 25 hours).`);
+
+    app.log.info('Global scraping task completed successfully.');
   } catch (error) {
     app.log.error(error, 'Error executing scheduled scraping task');
   }
 });
 
+// Inicialização do servidor HTTP Fastify
 const PORT = Number(process.env.PORT) || 3000;
 
 app.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {

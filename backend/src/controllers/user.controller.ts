@@ -7,6 +7,7 @@ export const registerUserSchema = z.object({
   name: z.string(),
   email: z.string().email(),
   password: z.string().min(6),
+  location: z.string().optional(),
 });
 
 export const telegramSetupSchema = z.object({
@@ -15,6 +16,7 @@ export const telegramSetupSchema = z.object({
 
 export const userPreferencesSchema = z.object({
   keyword: z.string().optional(),
+  location: z.string().optional(),
   isRemote: z.boolean().optional(),
 });
 
@@ -24,7 +26,7 @@ type UserPreferencesInput = z.infer<typeof userPreferencesSchema>;
 
 export class UserController {
   async register(request: FastifyRequest<{ Body: RegisterUserInput }>, reply: FastifyReply) {
-    const { name, email, password } = request.body;
+    const { name, email, password, location } = request.body;
 
     const userExists = await prisma.user.findUnique({
       where: { email },
@@ -41,6 +43,7 @@ export class UserController {
         name,
         email,
         password: hashedPassword,
+        location: location && location.trim() !== '' ? location : 'Brasil',
       },
     });
 
@@ -91,7 +94,7 @@ export class UserController {
 
   async updatePreferences(request: FastifyRequest<{ Params: { id: string }, Body: UserPreferencesInput }>, reply: FastifyReply) {
     const { id } = request.params;
-    const { keyword, isRemote } = request.body;
+    const { keyword, location, isRemote } = request.body;
     
     // Segurança básica: garantir que o usuário só altere o próprio perfil
     // request.user vem do middleware authenticateJWT
@@ -104,6 +107,7 @@ export class UserController {
         where: { id },
         data: {
           keyword,
+          location,
           isRemote,
         },
       });
@@ -112,6 +116,7 @@ export class UserController {
         message: 'Preferences updated successfully',
         user: {
           keyword: updatedUser.keyword,
+          location: updatedUser.location,
           isRemote: updatedUser.isRemote,
         }
       });

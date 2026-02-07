@@ -1,48 +1,134 @@
 import { PrismaClient } from '@prisma/client';
-import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { chromium, Browser } from 'playwright';
+import { Browser } from 'playwright';
+import { BrowserService } from './browser.service';
 
 const prisma = new PrismaClient();
 
 export class ScraperService {
-  private readonly DEFAULT_URL = 'https://www.linkedin.com/jobs/search?keywords=Java&location=Brasil&geoId=106057199&f_TPR=r86400&position=1&pageNum=0';
+  /** 
+   * Monta a URL de busca do LinkedIn garantindo filtros fixos de:
+   * - Vagas postadas nas últimas 24h
+   * - Trabalho remoto
+   * - GeoId do Brasil
+   * - Paginação (start)
+   * A keyword e a location podem ser customizadas, mas sempre dentro do contexto Brasil.
+   */
+  private buildSearchUrl(options?: {
+    keyword?: string;
+    location?: string;
+    last24h?: boolean;
+    remote?: boolean;
+    page?: number;
+  }) {
+    // Se não houver keyword, a busca fica vazia (o que o LinkedIn aceita)
+    const keyword = options?.keyword?.trim() || '';
+    const location = options?.location?.trim() || 'Brasil';
 
-  async scrapeJobs(keyword?: string) {
-    let url = this.DEFAULT_URL;
+    const params = new URLSearchParams();
+    params.set('keywords', keyword);
+    params.set('location', location);
+    params.set('geoId', '106057199'); // Brasil
     
-    if (keyword) {
-      const encodedKeyword = encodeURIComponent(keyword);
-      url = `https://www.linkedin.com/jobs/search?keywords=${encodedKeyword}&location=Brasil&geoId=106057199&f_TPR=r86400&position=1&pageNum=0`;
+    // Filtros opcionais baseados nas preferências do usuário:
+    if (options?.last24h) {
+      params.set('f_TPR', 'r86400'); // Últimas 24 horas
     }
 
-    console.log(`[Scraper] Iniciando scrape em: ${url}`);
+    if (options?.remote) {
+      params.set('f_WT', '2');      // Remoto
+    }
 
-    let browser: Browser | null = null;
+    // Paginação: LinkedIn usa 'start' (0, 25, 50...)
+    if (options?.page) {
+      params.set('start', (options.page * 25).toString());
+    }
+    
+    params.set('origin', 'JOB_SEARCH_PAGE_SEARCH_BUTTON');
+    params.set('refresh', 'true');
 
+    return `https://www.linkedin.com/jobs/search?${params.toString()}`;
+  }
+
+  /**
+   * Executa o processo principal de scraping:
+   * - Itera por múltiplas páginas (0 a 3) para encontrar mais vagas
+   * - Usa Playwright exclusivamente (sem Axios) com Scroll para carregar vagas dinâmicas
+   * - Extrai dados e salva no banco
+   */
+  async scrapeJobs(options?: {
+    keyword?: string;
+    location?: string;
+    last24h?: boolean;
+    remote?: boolean;
+  }) {
+    // Configuração para buscar múltiplas páginas e evitar "sempre as mesmas vagas"
+    const MAX_PAGES = 4; // Busca até a página 4 (aprox. 100 vagas)
+    let totalNewJobs = 0;
+    const allJobsFound: any[] = [];
+
+    let browser: Browser;
     try {
-      // Initialize Playwright browser
-      browser = await chromium.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
+      browser = await BrowserService.getInstance();
+    } catch (e) {
+      console.error('[Scraper] Erro ao iniciar BrowserService', e);
+      throw e;
+    }
 
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-        },
-      });
+    // Set para rastrear duplicatas dentro da mesma execução (entre páginas)
+    const seenUrls = new Set<string>();
 
-      const html = response.data;
+    for (let pageNum = 0; pageNum < MAX_PAGES; pageNum++) {
+      const url = this.buildSearchUrl({ ...options, page: pageNum });
+      const filters = [];
+      if (options?.last24h) filters.push('24h');
+      if (options?.remote) filters.push('Remoto');
+      filters.push(`Pág ${pageNum + 1}`);
+
+      console.log(`[Scraper] Buscando vagas (${filters.join(', ')}) em: ${url}`);
+
+      let html: string = '';
+      let page = null;
+
+      try {
+        page = await browser.newPage();
+        await page.setViewportSize({ width: 1280, height: 800 });
+        
+        // Navega e espera apenas o DOM carregar (mais rápido e evita timeouts)
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+        // Espera explícita pela lista de vagas para garantir carregamento
+        try {
+            await page.waitForSelector('ul.jobs-search__results-list', { timeout: 10000 });
+        } catch (e) {
+            console.warn(`[Scraper] Timeout esperando lista de vagas na pág ${pageNum + 1}`);
+        }
+
+        // Scroll suave para disparar o carregamento de mais itens (Infinite Scroll)
+        for (let i = 0; i < 3; i++) {
+          await page.evaluate(() => window.scrollBy(0, document.body.scrollHeight));
+          await page.waitForTimeout(2000); // Espera carregar novos cards
+        }
+
+        html = await page.content();
+      } catch (error) {
+        console.error(`[Scraper] Erro ao carregar página ${pageNum + 1}:`, error);
+        // Continua para a próxima página mesmo se esta falhar
+      } finally {
+        if (page) await page.close();
+      }
+
+      if (!html) continue;
+
       const $ = cheerio.load(html);
-
-      const jobs: any[] = [];
+      const jobsOnPage: any[] = [];
       const jobCards = $('ul.jobs-search__results-list li');
 
-      console.log(`[Scraper] Encontrados ${jobCards.length} cards de vagas.`);
+      console.log(`[Scraper] Encontrados ${jobCards.length} cards na página ${pageNum + 1}.`);
 
-      jobCards.each((i, element) => {
+      const keywordFilter = options?.keyword?.trim().toLowerCase() || '';
+
+      jobCards.each((_, element) => {
         const title = $(element).find('.base-search-card__title').text().trim();
         const company = $(element).find('.base-search-card__subtitle').text().trim();
         const location = $(element).find('.job-search-card__location').text().trim();
@@ -51,60 +137,119 @@ export class ScraperService {
 
         const cleanUrl = jobUrl ? jobUrl.split('?')[0] : '';
 
-        if (title && cleanUrl) {
-          jobs.push({
-            title,
-            company,
-            location,
-            postedDate,
-            jobUrl: cleanUrl,
-          });
+        // Verifica se a keyword está no título para garantir qualidade
+        const matchesKeyword = !keywordFilter || title.toLowerCase().includes(keywordFilter);
+
+        // Verifica duplicata na execução atual
+        if (cleanUrl && seenUrls.has(cleanUrl)) {
+            return; // Pula duplicata
+        }
+
+        if (title && cleanUrl && matchesKeyword) {
+          seenUrls.add(cleanUrl); // Marca como visto
+          jobsOnPage.push({ title, company, location, postedDate, jobUrl: cleanUrl });
         }
       });
 
-      console.log(`[Scraper] Extraídos ${jobs.length} vagas válidas. Processando detalhes...`);
+      if (jobsOnPage.length === 0) {
+        console.log(`[Scraper] Nenhuma vaga nova encontrada na página ${pageNum + 1} (possível fim da lista ou duplicatas). Interrompendo.`);
+        break;
+      }
 
+      console.log(`[Scraper] Extraídos ${jobsOnPage.length} vagas ÚNICAS da página ${pageNum + 1}. Processando...`);
+
+      // Usa o método de processamento em lote
+      const processResult = await this.processBatch(jobsOnPage, browser);
+      totalNewJobs += processResult.count;
+      allJobsFound.push(...jobsOnPage);
+
+      // Pausa amigável entre páginas para evitar rate limit
+      if (pageNum < MAX_PAGES - 1) {
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
+
+    console.log(`[Scraper] Finalizado Global. ${totalNewJobs} novas vagas salvas no total.`);
+    return { count: totalNewJobs, jobs: allJobsFound };
+  }
+
+  /**
+   * Processa um conjunto de vagas em lotes pequenos para:
+   * - Buscar detalhes (descrição) de cada vaga
+   * - Evitar bans do LinkedIn usando pausas entre lotes
+   * - Controlar quantas vagas são processadas por execução
+   */
+  private async processBatch(jobs: any[], browser: Browser) {
       let newCount = 0;
-      // Process up to 10 jobs
-      const jobsToProcess = jobs.slice(0, 10);
+      const jobsToProcess = jobs.slice(0, 20); // Limitado a 20 por página para evitar bans excessivos
+      const BATCH_SIZE = 3;
 
-      for (const job of jobsToProcess) {
+      for (let i = 0; i < jobsToProcess.length; i += BATCH_SIZE) {
+          const batch = jobsToProcess.slice(i, i + BATCH_SIZE);
+          console.log(`[Scraper] Processando lote ${Math.floor(i / BATCH_SIZE) + 1} de ${Math.ceil(jobsToProcess.length / BATCH_SIZE)}`);
+          
+          const results = await Promise.all(
+              batch.map(job => this.processJob(job, browser))
+          );
+          
+          newCount += results.filter(Boolean).length;
+          
+          if (i + BATCH_SIZE < jobsToProcess.length) {
+              await new Promise(r => setTimeout(r, 3000));
+          }
+      }
+      return { count: newCount };
+  }
+
+  /**
+   * Processa uma única vaga:
+   * - Verifica se a vaga já existe no banco (jobUrl único)
+   * - Caso não exista, busca a descrição detalhada
+   * - Filtra vagas cuja descrição contenha "Inglês" ou "English"
+   * - Salva a vaga completa na tabela Job se passar nos filtros
+   * Retorna true se criou uma nova vaga, false caso contrário ou em erro.
+   */
+  private async processJob(job: any, browser: Browser): Promise<boolean> {
+      try {
         const exists = await prisma.job.findUnique({
-          where: { jobUrl: job.jobUrl },
+            where: { jobUrl: job.jobUrl },
         });
 
         if (!exists) {
-          console.log(`[Scraper] Buscando detalhes para: ${job.title}`);
-          const description = await this.fetchJobDescription(browser, job.jobUrl);
+            console.log(`[Scraper] Buscando detalhes para: ${job.title}`);
+            const description = await this.fetchJobDescription(browser, job.jobUrl);
 
-          await prisma.job.create({
+            // Regra de Negócio: Ignorar vagas que exigem Inglês
+            if (description && /english|inglês/i.test(description)) {
+                console.log(`[Scraper] Vaga ignorada (Idioma Inglês detectado): ${job.title}`);
+                return false;
+            }
+
+            await prisma.job.create({
             data: {
-              title: job.title,
-              company: job.company,
-              location: job.location,
-              postedDate: job.postedDate,
-              jobUrl: job.jobUrl,
-              description: description || 'Descrição indisponível no momento.',
+                title: job.title,
+                company: job.company,
+                location: job.location,
+                postedDate: job.postedDate,
+                jobUrl: job.jobUrl,
+                description: description || 'Descrição indisponível no momento.',
             },
-          });
-          newCount++;
-          await new Promise(r => setTimeout(r, 2000));
+            });
+            return true;
         }
+      } catch (error) {
+          console.error(`[Scraper] Erro ao processar vaga ${job.title}:`, error);
       }
-
-      console.log(`[Scraper] Finalizado. ${newCount} novas vagas salvas.`);
-      return { count: newCount, jobs };
-
-    } catch (error) {
-      console.error('[Scraper] Erro ao realizar scraping:', error);
-      throw error;
-    } finally {
-      if (browser) {
-        await browser.close();
-      }
-    }
+      return false;
   }
 
+  /**
+   * Acessa a página individual da vaga usando o Playwright e:
+   * - Configura headers para simular um navegador real
+   * - Espera o seletor de descrição aparecer
+   * - Extrai o texto da descrição se disponível
+   * Retorna o texto da descrição ou null em caso de falha.
+   */
   private async fetchJobDescription(browser: Browser, url: string): Promise<string | null> {
     let page = null;
     try {

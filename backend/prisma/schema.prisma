@@ -22,6 +22,7 @@ model User {
   resumeText    String?   @db.Text
   telegramChatId BigInt?   @unique
   keyword       String?
+  location      String    @default("Brasil")
   isRemote      Boolean   @default(false)
   scansCount    Int       @default(0)
   createdAt     DateTime  @default(now())

@@ -13,12 +13,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _apiService = ApiService();
+  final _locationController = TextEditingController(text: 'Brasil');
   bool _isLoading = false;
 
   void _register() async {
     if (_nameController.text.isEmpty ||
         _emailController.text.isEmpty ||
-        _passwordController.text.isEmpty) {
+        _passwordController.text.isEmpty ||
+        _locationController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Por favor, preencha todos os campos.')),
       );
@@ -31,6 +33,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _nameController.text.trim(),
         _emailController.text.trim(),
         _passwordController.text,
+        _locationController.text.trim().isEmpty ? 'Brasil' : _locationController.text.trim(),
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -128,6 +131,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           prefixIcon: Icon(Icons.lock_outline),
                         ),
                         obscureText: true,
+                        onSubmitted: (_) => _register(),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _locationController,
+                        decoration: const InputDecoration(
+                          labelText: 'Localização',
+                          hintText: 'Ex: Brasil, São Paulo',
+                          prefixIcon: Icon(Icons.location_on),
+                        ),
+                        textInputAction: TextInputAction.done,
                         onSubmitted: (_) => _register(),
                       ),
                       const SizedBox(height: 24),
