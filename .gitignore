@@ -100,3 +100,4 @@ target/
 
 # Node modules (just in case)
 node_modules/
+openclaw/data/

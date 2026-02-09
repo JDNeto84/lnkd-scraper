@@ -51,6 +51,70 @@ export class ScraperService {
   }
 
   /**
+   * Executa o scraping baseado nas keywords definidas pelos usuários no banco.
+   * - Busca todos os usuários com keywords cadastradas.
+   * - Remove duplicatas e keywords vazias.
+   * - Executa o scrapeJobs para cada keyword única.
+   * - Se não houver keywords, executa uma busca padrão ampla.
+   */
+  async scrapeForUsers() {
+    console.log('[Scraper] Iniciando ciclo de scraping baseado em usuários...');
+
+    // 1. Busca keywords distintas dos usuários
+    const users = await prisma.user.findMany({
+      where: {
+        keyword: { not: null },
+        isActive: true // Opcional: apenas usuários ativos
+      },
+      select: {
+        keyword: true
+      }
+    });
+
+    // Filtra nulos, vazios e cria lista única
+    const distinctKeywords = [...new Set(
+      users
+        .map(u => u.keyword?.trim())
+        .filter((k): k is string => !!k && k.length > 0)
+    )];
+
+    console.log(`[Scraper] Encontradas ${distinctKeywords.length} keywords únicas de usuários: ${distinctKeywords.join(', ')}`);
+
+    // 2. Se não houver keywords, faz busca padrão (fallback)
+    if (distinctKeywords.length === 0) {
+      console.log('[Scraper] Nenhuma keyword de usuário encontrada. Executando busca global padrão.');
+      await this.scrapeJobs({
+        keyword: '',
+        location: 'Brasil',
+        last24h: true,
+        remote: true
+      });
+      return;
+    }
+
+    // 3. Itera sobre cada keyword e executa o scraping
+    for (const keyword of distinctKeywords) {
+      console.log(`[Scraper] >>> Processando keyword: "${keyword}" <<<`);
+      try {
+        await this.scrapeJobs({
+          keyword,
+          location: 'Brasil',
+          last24h: true,
+          remote: true
+        });
+        
+        // Pausa entre keywords para não sobrecarregar o browser/LinkedIn
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      } catch (error) {
+        console.error(`[Scraper] Erro ao processar keyword "${keyword}":`, error);
+        // Continua para a próxima keyword mesmo com erro
+      }
+    }
+
+    console.log('[Scraper] Ciclo de scraping baseado em usuários finalizado.');
+  }
+
+  /**
    * Executa o processo principal de scraping:
    * - Itera por múltiplas páginas (0 a 3) para encontrar mais vagas
    * - Usa Playwright exclusivamente (sem Axios) com Scroll para carregar vagas dinâmicas
@@ -137,15 +201,12 @@ export class ScraperService {
 
         const cleanUrl = jobUrl ? jobUrl.split('?')[0] : '';
 
-        // Verifica se a keyword está no título para garantir qualidade
-        const matchesKeyword = !keywordFilter || title.toLowerCase().includes(keywordFilter);
-
         // Verifica duplicata na execução atual
         if (cleanUrl && seenUrls.has(cleanUrl)) {
             return; // Pula duplicata
         }
 
-        if (title && cleanUrl && matchesKeyword) {
+        if (title && cleanUrl) {
           seenUrls.add(cleanUrl); // Marca como visto
           jobsOnPage.push({ title, company, location, postedDate, jobUrl: cleanUrl });
         }

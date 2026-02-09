@@ -127,16 +127,11 @@ if (telegramService) {
 cron.schedule('*/15 * * * *', async () => {
   app.log.info('Running global scheduled scraping task...');
   try {
-    // 1) Executa scraping amplo (keyword vazia)
-    // O ScraperService já lida com filtros de idioma (Sem Inglês) e duplicatas
-    app.log.info(`Scraping broad search (empty keyword) for remote jobs in Brazil`);
+    // 1) Executa scraping baseado nas keywords dos usuários
+    // Busca keywords únicas na tabela User e executa uma busca para cada
+    app.log.info(`Scraping jobs based on user keywords...`);
     
-    await scraperService.scrapeJobs({
-      keyword: '',   // Keyword vazia para buscar "qualquer vaga"
-      location: 'Brasil',
-      last24h: true, // Apenas últimas 24h
-      remote: true,  // Apenas Remoto
-    });
+    await scraperService.scrapeForUsers();
 
     // 2) Limpa vagas antigas (mais de 25h) conforme regra de negócio
     // Regra: "remove populated from 48 hours to 25 hours"
