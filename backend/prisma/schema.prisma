@@ -37,6 +37,8 @@ model Job {
   description String?  @db.Text
   jobUrl      String   @unique
   postedDate  String?
+  adjustedDescription String? @db.Text
+  adjustIA    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

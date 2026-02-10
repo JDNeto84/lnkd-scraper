@@ -1,13 +1,16 @@
 import { Telegraf, Markup } from 'telegraf';
 import { PrismaClient } from '@prisma/client';
+import { ScraperService } from './scraper.service';
 
 const prisma = new PrismaClient();
 
 export class TelegramService {
   private bot: Telegraf;
+  private scraperService: ScraperService;
 
-  constructor(token: string) {
+  constructor(token: string, scraperService: ScraperService) {
     this.bot = new Telegraf(token);
+    this.scraperService = scraperService;
     this.initialize();
   }
 
@@ -94,7 +97,25 @@ export class TelegramService {
             });
 
             if (!jobs || jobs.length === 0) {
-                return ctx.reply('Não encontrei vagas recentes com esses critérios no banco de dados. Aguarde o scraper popular novas vagas.');
+                ctx.reply(`Não encontrei vagas recentes no banco para "${user.keyword}". Iniciando busca no LinkedIn agora... 🕵️‍♂️\nIsso pode levar alguns minutos. Eu te aviso quando terminar!`);
+                
+                // Trigger scraper asynchronously
+                this.scraperService.scrapeJobs({
+                    keyword: user.keyword,
+                    remote: user.isRemote,
+                    last24h: true
+                }).then((result) => {
+                    if (result.count > 0) {
+                        ctx.reply(`✅ Busca finalizada! Encontrei ${result.count} novas vagas para "${user.keyword}".\nUse /vagas para visualizá-las.`);
+                    } else {
+                        ctx.reply(`⚠️ Busca finalizada para "${user.keyword}", mas não encontrei novas vagas no momento.`);
+                    }
+                }).catch((err) => {
+                    console.error(`[Telegram] Erro ao executar scraper gatilho para ${user.keyword}:`, err);
+                    ctx.reply(`❌ Ocorreu um erro ao tentar buscar vagas novas para "${user.keyword}". Tente novamente mais tarde.`);
+                });
+
+                return;
             }
 
             for (const job of jobs) {

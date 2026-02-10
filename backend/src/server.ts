@@ -7,6 +7,7 @@ import { userRoutes } from './routes/user.routes';
 import { authRoutes } from './routes/auth.routes';
 import { TelegramService } from './services/telegram.service';
 import { ScraperService } from './services/scraper.service';
+import { JobProcessorService } from './services/jobProcessor.service';
 import cron from 'node-cron';
 import { PrismaClient } from '@prisma/client';
 
@@ -91,6 +92,21 @@ app.get('/api/scrape', async (request: any, reply) => {
   }
 });
 
+// Endpoint para disparar o processamento de IA manualmente
+app.post('/api/process-jobs', async (request, reply) => {
+  try {
+    // Processa em background (sem await) ou com await?
+    // Com await para dar feedback imediato de "feito" ou "erro"
+    // Mas se demorar muito, pode dar timeout.
+    // Melhor retornar que começou.
+    jobProcessorService.processPendingJobs();
+    return reply.send({ message: 'Processamento de vagas iniciado em background.' });
+  } catch (error) {
+    request.log.error(error);
+    return reply.status(500).send({ message: 'Erro ao iniciar processamento' });
+  }
+});
+
 // Rota para listar vagas (API Jobs)
 app.get('/api/jobs', async (request: any, reply) => {
     const { keyword, location, page } = request.query as { keyword?: string, location?: string, page?: string };
@@ -108,8 +124,9 @@ app.get('/api/jobs', async (request: any, reply) => {
 });
 
 // Inicialização de serviços auxiliares compartilhados
-const telegramService = process.env.TELEGRAM_TOKEN ? new TelegramService(process.env.TELEGRAM_TOKEN) : null;
 const scraperService = new ScraperService();
+const jobProcessorService = new JobProcessorService();
+const telegramService = process.env.TELEGRAM_TOKEN ? new TelegramService(process.env.TELEGRAM_TOKEN, scraperService) : null;
 
 // Inicializa o bot do Telegram, caso exista TELEGRAM_TOKEN configurado
 if (telegramService) {
@@ -150,6 +167,17 @@ cron.schedule('*/15 * * * *', async () => {
     app.log.info('Global scraping task completed successfully.');
   } catch (error) {
     app.log.error(error, 'Error executing scheduled scraping task');
+  }
+});
+
+// Agenda a tarefa de processamento de vagas com IA a cada 10 minutos
+cron.schedule('*/10 * * * *', async () => {
+  app.log.info('Running job processing task (AI adjustment)...');
+  try {
+    await jobProcessorService.processPendingJobs();
+    app.log.info('Job processing task completed.');
+  } catch (error) {
+    app.log.error(error, 'Error executing job processing task');
   }
 });
 

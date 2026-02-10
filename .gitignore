@@ -101,3 +101,6 @@ target/
 # Node modules (just in case)
 node_modules/
 openclaw/data/
+webui_data/
+ollama_data/
+backend/openclaw-identity/

@@ -24,6 +24,7 @@
     "fastify-type-provider-zod": "^4.0.2",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^4.2.1",
+    "openclaw": "^2026.2.9",
     "playwright": "^1.49.1",
     "telegraf": "^4.16.3",
     "zod": "^3.24.1"

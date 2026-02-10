@@ -4,12 +4,15 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - ./backend/openclaw-identity:/root/.openclaw
     ports:
       - "3000:3000"
     environment:
       - BACKEND_DB_URL=${BACKEND_DB_URL}
       - JWT_SECRET=${JWT_SECRET}
       - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - OPENCLAW_API_URL=http://openclaw:18789/v1/chat/completions
     depends_on:
       - database
     command: sh -c "echo 'Waiting 7s for DB...' && sleep 7 && npm run dev"
@@ -72,6 +75,28 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - ./ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: always
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    volumes:
+      - ./webui_data:/app/backend/data
+    ports:
+      - "8080:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    restart: always
+    depends_on:
+      - ollama
 
 volumes:
   postgres_data:
