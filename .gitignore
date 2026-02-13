@@ -104,3 +104,5 @@ openclaw/data/
 webui_data/
 ollama_data/
 backend/openclaw-identity/
+docker-compose.yml
+ollama/data/
