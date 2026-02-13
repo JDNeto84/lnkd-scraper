@@ -3,8 +3,10 @@ import cors from '@fastify/cors';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
+import fastifyMultipart from '@fastify/multipart';
 import { userRoutes } from './routes/user.routes';
 import { authRoutes } from './routes/auth.routes';
+import { cvRoutes } from './routes/cv.routes';
 import { TelegramService } from './services/telegram.service';
 import { ScraperService } from './services/scraper.service';
 import { JobProcessorService } from './services/jobProcessor.service';
@@ -62,8 +64,10 @@ app.register(fastifySwaggerUi, {
 });
 
 // Registra rotas de domínio
+app.register(fastifyMultipart);
 app.register(userRoutes);
 app.register(authRoutes);
+app.register(cvRoutes);
 
 // Endpoint para disparar o scraping manualmente via HTTP:
 // - Permite passar keyword/location e flags last24h/remote pela query string

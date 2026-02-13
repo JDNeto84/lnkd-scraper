@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -12,6 +13,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _apiService = ApiService();
   Map<String, dynamic>? _user;
+  String? _extractedCVText;
   bool _isLoading = true;
 
   @override
@@ -175,6 +177,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _pickAndUploadCV() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: true,
+      );
+
+      if (result != null) {
+        final file = result.files.single;
+        
+        if (file.bytes == null) {
+          throw Exception('Não foi possível ler o arquivo. Tente novamente.');
+        }
+
+        setState(() => _isLoading = true);
+        
+        final response = await _apiService.uploadCV(
+          file.bytes!, 
+          file.name,
+        );
+        
+        setState(() {
+          _extractedCVText = response['content'];
+        });
+        _showSnackBar('CV enviado com sucesso! ID: ${response['id']}', isError: false);
+      }
+    } catch (e) {
+      _showSnackBar('Erro ao enviar CV: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   void _activateTelegram() async {
     final userId = _user?['user']['id'];
     if (userId == null) return;
@@ -201,6 +237,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
+    // Log do erro para o console, pois o SnackBar pode sumir rápido
+    if (isError) {
+      print('🔴 ERRO (SnackBar): $message');
+    } else {
+      print('🟢 INFO (SnackBar): $message');
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -280,6 +323,75 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                       ],
                     ),
+
+                    if (_extractedCVText != null) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Texto Extraído',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: SingleChildScrollView(
+                          child: Text(
+                            _extractedCVText!,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 32),
+
+                    // Seção de Upload de CV
+                    Text(
+                      'Seu Currículo',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.description, size: 32, color: Colors.redAccent),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Enviar PDF do Currículo',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    'Extrairemos o texto automaticamente',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            ElevatedButton(
+                              onPressed: _pickAndUploadCV,
+                              child: const Text('Upload'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
                     const SizedBox(height: 32),
 
                     // Seção de Preferências

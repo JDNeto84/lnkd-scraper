@@ -31,6 +31,7 @@ class ApiService {
       await _storage.write(key: 'jwt_token', value: data['token']);
       return data;
     } else {
+      print('❌ Erro no login: ${response.statusCode} - ${response.body}');
       throw Exception('Login failed: ${response.body}');
     }
   }
@@ -97,6 +98,32 @@ class ApiService {
       return jsonDecode(response.body);
     } else {
       throw Exception('Failed to get user profile: ${response.body}');
+    }
+  }
+
+  // CV: Upload
+  Future<Map<String, dynamic>> uploadCV(List<int> fileBytes, String filename) async {
+    String? token = await _storage.read(key: 'jwt_token');
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/upload-cv'));
+    
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+    
+    request.files.add(http.MultipartFile.fromBytes(
+      'file',
+      fileBytes,
+      filename: filename,
+    ));
+    
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      print('❌ Erro no uploadCV: ${response.statusCode} - ${response.body}');
+      throw Exception('Failed to upload CV: ${response.body}');
     }
   }
   

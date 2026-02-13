@@ -3,8 +3,6 @@ services:
     build: ./backend
     volumes:
       - ./backend:/app
-      - /app/node_modules
-      - ./backend/openclaw-identity:/root/.openclaw
     ports:
       - "3000:3000"
     environment:
