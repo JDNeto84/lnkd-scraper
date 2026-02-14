@@ -1,15 +1,17 @@
 import { PrismaClient } from '@prisma/client';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { Ollama } from 'ollama';
 
 const prisma = new PrismaClient();
-const execFileAsync = promisify(execFile);
 
 export class JobProcessorService {
-  private openClawToken: string;
+  private ollama: Ollama;
+  private model: string;
 
   constructor() {
-    this.openClawToken = process.env.OPENCLAW_GATEWAY_TOKEN || '';
+    this.ollama = new Ollama({
+      host: process.env.OLLAMA_HOST || 'http://localhost:11434',
+    });
+    this.model = process.env.OLLAMA_MODEL || 'llama3';
   }
 
   private systemPrompt = `
@@ -64,7 +66,7 @@ Ignore completamente qualquer seção de benefícios, cultura corporativa ou tex
 
         try {
           console.log(`Processing job ${job.id}...`);
-          const processedDescription = await this.callOpenClaw(job.description);
+          const processedDescription = await this.callOllama(job.description);
           
           if (processedDescription) {
             await prisma.job.update({
@@ -76,7 +78,7 @@ Ignore completamente qualquer seção de benefícios, cultura corporativa ou tex
             });
             console.log(`Job ${job.id} processed successfully.`);
           } else {
-            console.warn(`Failed to process job ${job.id}: No response from OpenClaw.`);
+            console.warn(`Failed to process job ${job.id}: No response from Ollama.`);
           }
         } catch (error) {
           console.error(`Error processing job ${job.id}:`, error);
@@ -88,62 +90,36 @@ Ignore completamente qualquer seção de benefícios, cultura corporativa ou tex
     }
   }
 
-  private async callOpenClaw(description: string): Promise<string | null> {
+  private async callOllama(description: string): Promise<string | null> {
     try {
-      const fullPrompt = `${this.systemPrompt}\n\nJob Description:\n${description}`;
+      console.log(`Sending request to Ollama (${this.model}) at ${this.ollama.config.host}...`);
       
-      // Use the local npm package binary
-      // The backend container has WORKDIR /app, so this is relative to that
-      const openclawPath = './node_modules/.bin/openclaw';
-      
-      const args = [
-        'agent',
-        '--agent', 'main',
-        '--session-id', `job-${Date.now()}`, // Unique session per call or reuse? 
-                                            // Reusing session might accumulate context which is bad for independent job descriptions.
-                                            // Using unique session ID ensures clean slate.
-        '--message', fullPrompt,
-        '--json'
-      ];
-
-      console.log('Executing OpenClaw CLI...');
-      const { stdout, stderr } = await execFileAsync(openclawPath, args, {
-        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-        timeout: 120000 // 2 minutes timeout
+      const response = await this.ollama.chat({
+        model: this.model,
+        messages: [
+          { role: 'system', content: this.systemPrompt },
+          { role: 'user', content: `Job Description:\n${description}` }
+        ],
+        stream: false,
       });
 
-      if (stderr) {
-        // stderr might contain logs even on success, so we just log it as debug/warn
-        console.warn('OpenClaw CLI stderr (might be logs):', stderr);
-      }
-
-      console.log('OpenClaw response received.');
-      
-      try {
-        const json = JSON.parse(stdout);
-        
-        if (json.status !== 'ok' || !json.result || !json.result.payloads || json.result.payloads.length === 0) {
-           console.warn('Invalid OpenClaw JSON response:', JSON.stringify(json).slice(0, 200));
-           return null;
-        }
-
-        const responseText = json.result.payloads.map((p: any) => p.text).join('\n');
-        
-        if (!responseText.trim()) {
-          console.warn('Empty text in OpenClaw response');
-          return null;
-        }
-
-        return responseText.trim();
-
-      } catch (parseError) {
-        console.error('Failed to parse OpenClaw JSON output:', parseError);
-        console.log('Raw output start:', stdout.slice(0, 500));
+      if (!response || !response.message || !response.message.content) {
+        console.warn('Invalid Ollama response structure:', response);
         return null;
       }
 
+      const content = response.message.content.trim();
+      
+      if (!content) {
+        console.warn('Empty content in Ollama response');
+        return null;
+      }
+
+      console.log('Ollama response received successfully.');
+      return content;
+
     } catch (error) {
-      console.error('Error calling OpenClaw CLI:', error);
+      console.error('Error calling Ollama:', error);
       return null;
     }
   }
