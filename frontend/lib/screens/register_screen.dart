@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../widgets/responsive_layout.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -60,118 +61,130 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF0D47A1)),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () => Navigator.pop(context),
         ),
+        title: const Text('Nova Conta'),
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(
-                Icons.person_add_outlined,
-                size: 64,
-                color: Color(0xFF0D47A1),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Crie sua conta',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0D47A1),
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Comece sua jornada profissional hoje',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-              ),
-              const SizedBox(height: 48),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextField(
-                        controller: _nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Nome Completo',
-                          prefixIcon: Icon(Icons.person_outline),
-                        ),
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _emailController,
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          prefixIcon: Icon(Icons.email_outlined),
-                        ),
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _passwordController,
-                        decoration: const InputDecoration(
-                          labelText: 'Senha',
-                          prefixIcon: Icon(Icons.lock_outline),
-                        ),
-                        obscureText: true,
-                        onSubmitted: (_) => _register(),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _locationController,
-                        decoration: const InputDecoration(
-                          labelText: 'Localização',
-                          hintText: 'Ex: Brasil, São Paulo',
-                          prefixIcon: Icon(Icons.location_on),
-                        ),
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _register(),
-                      ),
-                      const SizedBox(height: 24),
-                      _isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : ElevatedButton(
-                              onPressed: _register,
-                              child: const Text('CADASTRAR'),
-                            ),
-                    ],
+      body: ResponsiveLayout(
+        maxWidth: 500,
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: 24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Icon(
+                  Icons.person_add_rounded,
+                  size: 80,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Comece agora',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                    letterSpacing: -0.5,
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Já tem uma conta?',
-                    style: TextStyle(color: Colors.grey[600]),
+                const SizedBox(height: 12),
+                Text(
+                  'Crie seu perfil e deixe a IA encontrar as melhores vagas.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: theme.hintColor,
                   ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: const Text('Faça login'),
+                ),
+                const SizedBox(height: 40),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Nome Completo',
+                            prefixIcon: Icon(Icons.person_rounded),
+                          ),
+                          textInputAction: TextInputAction.next,
+                        ),
+                        const SizedBox(height: 20),
+                        TextField(
+                          controller: _emailController,
+                          decoration: const InputDecoration(
+                            labelText: 'Email',
+                            prefixIcon: Icon(Icons.alternate_email_rounded),
+                          ),
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                        ),
+                        const SizedBox(height: 20),
+                        TextField(
+                          controller: _passwordController,
+                          decoration: const InputDecoration(
+                            labelText: 'Senha',
+                            prefixIcon: Icon(Icons.lock_person_rounded),
+                          ),
+                          obscureText: true,
+                          onSubmitted: (_) => _register(),
+                        ),
+                        const SizedBox(height: 20),
+                        TextField(
+                          controller: _locationController,
+                          decoration: const InputDecoration(
+                            labelText: 'Localização',
+                            hintText: 'Ex: Brasil, São Paulo',
+                            prefixIcon: Icon(Icons.location_on_rounded),
+                          ),
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _register(),
+                        ),
+                        const SizedBox(height: 32),
+                        _isLoading
+                            ? const Center(child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8.0),
+                              child: CircularProgressIndicator(),
+                            ))
+                            : ElevatedButton(
+                                onPressed: _register,
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 20),
+                                ),
+                                child: const Text('CADASTRAR'),
+                              ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 32),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Já possui uma conta?',
+                      style: TextStyle(color: theme.hintColor),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Fazer Login'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

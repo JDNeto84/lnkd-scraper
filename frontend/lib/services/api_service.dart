@@ -127,6 +127,36 @@ class ApiService {
     }
   }
   
+  // User: Disconnect Telegram
+  Future<void> disconnectTelegram() async {
+    final headers = await _getHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/users/telegram-disconnect'),
+      headers: headers,
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to disconnect Telegram: ${response.body}');
+    }
+  }
+
+  // CV: Update Text manual
+  Future<Map<String, dynamic>> updateCVText(String content) async {
+    final headers = await _getHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/save-cv-text'),
+      headers: headers,
+      body: jsonEncode({'content': content}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      print('❌ Erro no updateCVText: ${response.statusCode} - ${response.body}');
+      throw Exception('Failed to save CV text: ${response.body}');
+    }
+  }
+  
   // Logout
   Future<void> logout() async {
     await _storage.delete(key: 'jwt_token');

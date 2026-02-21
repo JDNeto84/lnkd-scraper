@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
+import '../widgets/responsive_layout.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,6 +16,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Map<String, dynamic>? _user;
   String? _extractedCVText;
   bool _isLoading = true;
+  final _cvTextController = TextEditingController();
+  bool _isEditingCV = false;
+  bool _isSavingCV = false;
 
   @override
   void initState() {
@@ -39,7 +43,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _loadUser() async {
     try {
       final user = await _apiService.getMe();
-      setState(() => _user = user);
+      setState(() {
+        _user = user;
+        // Carrega o texto extraído persistido no banco
+        if (user['user'] != null && user['user']['extractedText'] != null) {
+          _extractedCVText = user['user']['extractedText'];
+          _cvTextController.text = _extractedCVText!;
+        }
+      });
     } catch (e) {
       if (mounted) {
         _showSnackBar('Erro ao carregar perfil: $e', isError: true);
@@ -71,111 +82,114 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _showPreferencesDialog() {
-    final keywordController = TextEditingController(text: _user?['user']['keyword'] ?? '');
-    final locationController = TextEditingController(text: _user?['user']['location'] ?? 'Brasil');
-    bool isRemote = _user?['user']['isRemote'] ?? false;
-    bool isSaving = false;
+  final keywordController = TextEditingController(text: _user?['user']['keyword'] ?? '');
+  final locationController = TextEditingController(text: _user?['user']['location'] ?? 'Brasil');
+  bool isRemote = _user?['user']['isRemote'] ?? false;
+  bool isSaving = false;
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Row(
-                children: [
-                  Icon(Icons.tune, color: Theme.of(context).primaryColor),
-                  const SizedBox(width: 8),
-                  const Text('Preferências'),
-                ],
-              ),
-              content: Column(
+  showDialog(
+    context: context,
+    builder: (context) {
+      final theme = Theme.of(context);
+      final isDark = theme.brightness == Brightness.dark;
+
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            backgroundColor: theme.canvasColor,
+            elevation: 8,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+            title: Row(
+              children: [
+                Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                const Text('Preferências'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                   const SizedBox(height: 8),
                   TextField(
                     controller: keywordController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Cargo ou Tecnologia',
-                      hintText: 'Ex: Desenvolvedor React',
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: locationController,
-                    decoration: InputDecoration(
-                      labelText: 'Localização',
-                      hintText: 'Ex: Brasil, São Paulo',
-                      prefixIcon: const Icon(Icons.location_on),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
+                      hintText: 'Ex: Java, NextJs',
+                      prefixIcon: Icon(Icons.search_rounded),
                     ),
                   ),
                   const SizedBox(height: 20),
+                  TextField(
+                    controller: locationController,
+                    decoration: const InputDecoration(
+                      labelText: 'Localização',
+                      hintText: 'Ex: São Paulo',
+                      prefixIcon: Icon(Icons.location_on_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                   Container(
                     decoration: BoxDecoration(
-                      color: isRemote ? Colors.green.shade50 : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
+                      color: isRemote 
+                          ? (isDark ? Colors.green.withOpacity(0.1) : Colors.green.shade50)
+                          : (isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade50),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: isRemote ? Colors.green.shade200 : Colors.grey.shade300,
+                        color: isRemote 
+                            ? (isDark ? Colors.green.withOpacity(0.3) : Colors.green.shade200)
+                            : (isDark ? Colors.white10 : Colors.grey.shade300),
                       ),
                     ),
                     child: SwitchListTile(
-                      title: const Text('Apenas Vagas Remotas'),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      title: const Text('Apenas Vagas Remotas', style: TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(
-                        isRemote ? 'Você verá apenas vagas home office' : 'Mostrando todas as vagas',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        isRemote ? 'Filtro por Home Office ativado' : 'Mostrando todos os modelos',
+                        style: theme.textTheme.bodySmall,
                       ),
                       value: isRemote,
                       activeColor: Colors.green,
                       onChanged: (val) => setState(() => isRemote = val),
                       secondary: Icon(
-                        isRemote ? Icons.home_work : Icons.business,
-                        color: isRemote ? Colors.green : Colors.grey,
+                        isRemote ? Icons.home_work_rounded : Icons.business_rounded,
+                        color: isRemote ? Colors.green : theme.hintColor,
                       ),
                     ),
                   ),
                 ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancelar'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancelar', style: TextStyle(color: theme.hintColor)),
+              ),
+              ElevatedButton(
+                onPressed: isSaving ? null : () async {
+                  setState(() => isSaving = true);
+                  Navigator.pop(context);
+                  _updatePreferences(
+                    keywordController.text,
+                    locationController.text,
+                    isRemote,
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
-                ElevatedButton(
-                  onPressed: isSaving ? null : () async {
-                    setState(() => isSaving = true);
-                    Navigator.pop(context);
-                    _updatePreferences(
-                      keywordController.text,
-                      locationController.text,
-                      isRemote,
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
-                  child: isSaving 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Salvar'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
+                child: isSaving 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Salvar'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
 
   void _pickAndUploadCV() async {
     try {
@@ -199,15 +213,123 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           file.name,
         );
         
-        setState(() {
-          _extractedCVText = response['content'];
-        });
+        if (mounted) {
+          setState(() {
+            _extractedCVText = response['content'];
+            if (_extractedCVText != null) {
+              _cvTextController.text = _extractedCVText!;
+            }
+          });
+        }
         _showSnackBar('CV enviado com sucesso! ID: ${response['id']}', isError: false);
       }
     } catch (e) {
       _showSnackBar('Erro ao enviar CV: $e', isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showEditCVDialog() {
+    _cvTextController.text = _extractedCVText ?? '';
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: theme.canvasColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+              title: Row(
+                children: [
+                   Icon(Icons.edit_note_rounded, color: theme.colorScheme.primary),
+                   const SizedBox(width: 12),
+                   const Text('Editar Currículo'),
+                ],
+              ),
+              content: SizedBox(
+                width: 600,
+                child: TextField(
+                  controller: _cvTextController,
+                  maxLines: 15,
+                  decoration: InputDecoration(
+                    hintText: 'Cole ou edite seu currículo aqui...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancelar', style: TextStyle(color: theme.hintColor)),
+                ),
+                ElevatedButton(
+                  onPressed: isSaving ? null : () async {
+                    setState(() => isSaving = true);
+                    try {
+                      await _apiService.updateCVText(_cvTextController.text);
+                      if (mounted) {
+                        this.setState(() {
+                          _extractedCVText = _cvTextController.text;
+                        });
+                        Navigator.pop(context);
+                        _showSnackBar('Currículo atualizado!', isError: false);
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        _showSnackBar('Erro ao salvar: $e', isError: true);
+                      }
+                    } finally {
+                      if (mounted) setState(() => isSaving = false);
+                    }
+                  },
+                  child: isSaving 
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Salvar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _saveManualCV() async {
+    // Mantendo para compatibilidade se necessário, mas o fluxo principal agora é via Diálogo
+    _showEditCVDialog();
+  }
+
+  void _disconnectTelegram() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Desconectar Telegram?'),
+        content: const Text('Você deixará de receber notificações de vagas instantâneas.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            child: const Text('Desconectar', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        setState(() => _isLoading = true);
+        await _apiService.disconnectTelegram();
+        _showSnackBar('Telegram desconectado com sucesso!', isError: false);
+        _loadUser();
+      } catch (e) {
+        _showSnackBar('Erro ao desconectar: $e', isError: true);
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -257,327 +379,300 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final userName = _user?['user']['name'] ?? 'Usuário';
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final userData = _user?['user'];
+    final userName = userData?['name'] ?? 'Usuário';
     final userInitial = userName.isNotEmpty ? userName[0].toUpperCase() : 'U';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
-          children: [
-            Icon(Icons.work_outline_rounded, color: Color(0xFF0D47A1)),
-            SizedBox(width: 8),
-            Text(
-              'JobMatch AI',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1)),
-            ),
-          ],
-        ),
-        centerTitle: false,
+        title: const Text('JobMatch AI'),
         actions: [
-          IconButton(onPressed: _logout, icon: const Icon(Icons.logout)),
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            tooltip: 'Sair',
+            onPressed: _logout,
+          ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: () async => _loadUser(),
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header com Avatar
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 30,
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          child: Text(
-                            userInitial,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+      body: ResponsiveLayout(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Welcome Card
+              Card(
+                color: colorScheme.primaryContainer.withOpacity(isDark ? 0.2 : 0.9),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 35,
+                        backgroundColor: colorScheme.onPrimary,
+                        child: Text(
+                          userInitial,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.primary,
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        Column(
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Olá, $userName!',
-                              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              'Bem-vindo, $userName!',
+                              style: theme.textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? colorScheme.onSurface : colorScheme.onPrimary,
+                              ),
                             ),
                             Text(
-                              'Plano: ${_user!['user']['plan']}',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontWeight: FontWeight.w500,
+                              'Plano: ${userData?['plan'] ?? 'Free'}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: (isDark ? colorScheme.onSurface : colorScheme.onPrimary).withOpacity(0.8),
                               ),
                             ),
                           ],
-                        ),
-                      ],
-                    ),
-
-                    if (_extractedCVText != null) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        'Texto Extraído',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        constraints: const BoxConstraints(maxHeight: 200),
-                        child: SingleChildScrollView(
-                          child: Text(
-                            _extractedCVText!,
-                            style: const TextStyle(fontSize: 12),
-                          ),
                         ),
                       ),
                     ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
 
-                    const SizedBox(height: 32),
-
-                    // Seção de Upload de CV
-                    Text(
-                      'Seu Currículo',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+              // Overview Stats
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatCard(
+                      'Perfil Completo',
+                      '${_calculateProfileCompletion()}%',
+                      Icons.verified_user_rounded,
+                      colorScheme.primary,
                     ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.description, size: 32, color: Colors.redAccent),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Enviar PDF do Currículo',
-                                    style: TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                  Text(
-                                    'Extrairemos o texto automaticamente',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            ElevatedButton(
-                              onPressed: _pickAndUploadCV,
-                              child: const Text('Upload'),
-                            ),
-                          ],
-                        ),
-                      ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildStatCard(
+                      'Notificações',
+                      _isTelegramConnected() ? 'Ativas' : 'Inativas',
+                      Icons.notifications_active_rounded,
+                      _isTelegramConnected() ? Colors.green : colorScheme.secondary,
                     ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
 
-                    const SizedBox(height: 32),
-
-                    // Seção de Preferências
-                    Text(
-                      'Sua Busca Ideal',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+              // Search Preferences Section
+              Text(
+                'O que você procura?',
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: Icon(Icons.search_rounded, color: colorScheme.primary),
+                      title: const Text('Cargo ou Palavra-chave'),
+                      subtitle: Text(userData?['keyword'] ?? 'Não definido'),
+                      trailing: const Icon(Icons.edit_rounded, size: 20),
+                      onTap: _showPreferencesDialog,
                     ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Icon(Icons.manage_search, size: 32, color: Color(0xFF0D47A1)),
-                                IconButton(
-                                  icon: const Icon(Icons.edit, color: Colors.grey),
-                                  onPressed: _showPreferencesDialog,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 8,
-                              children: [
-                                Chip(
-                                  avatar: const Icon(Icons.search, size: 18),
-                                  label: Text(_user?['user']['keyword'] ?? 'Nenhum termo definido'),
-                                  backgroundColor: Colors.blue.shade50,
-                                ),
-                                Chip(
-                                  avatar: const Icon(Icons.location_on, size: 18),
-                                  label: Text(_user?['user']['location'] ?? 'Brasil'),
-                                  backgroundColor: Colors.purple.shade50,
-                                ),
-                                if (_user?['user']['isRemote'] == true)
-                                  Chip(
-                                    avatar: const Icon(Icons.home_work, size: 18),
-                                    label: const Text('Remoto'),
-                                    backgroundColor: Colors.green.shade50,
-                                  )
-                                else
-                                  Chip(
-                                    avatar: const Icon(Icons.location_on, size: 18),
-                                    label: const Text('Presencial/Híbrido'),
-                                    backgroundColor: Colors.orange.shade50,
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+                    Divider(height: 1, indent: 64, color: isDark ? Colors.white10 : Colors.black12),
+                    ListTile(
+                      leading: Icon(Icons.location_on_rounded, color: colorScheme.primary),
+                      title: const Text('Localização Preferencial'),
+                      subtitle: Text(userData?['location'] ?? 'Brasil'),
+                      trailing: const Icon(Icons.edit_rounded, size: 20),
+                      onTap: _showPreferencesDialog,
                     ),
-
-                    const SizedBox(height: 32),
-
-                    // Seção de Integrações
-                    Text(
-                      'Canais de Notificação',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    // Card Telegram
-                    Card(
-                      elevation: _isTelegramConnected() ? 2 : 4,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(
-                          color: _isTelegramConnected() ? Colors.green.withOpacity(0.5) : Colors.transparent,
-                          width: 1,
-                        ),
-                      ),
-                      color: _isTelegramConnected() ? Colors.green.shade50 : Colors.white,
-                      child: Padding(
-                        padding: const EdgeInsets.all(20.0),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.telegram, size: 32, color: Colors.blue),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Notificações no Telegram',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        _isTelegramConnected()
-                                            ? 'Bot ativo e monitorando vagas'
-                                            : 'Receba vagas novas instantaneamente',
-                                        style: TextStyle(
-                                          color: _isTelegramConnected() ? Colors.green[800] : Colors.grey[600],
-                                          fontSize: 13,
-                                          fontWeight: _isTelegramConnected() ? FontWeight.w500 : FontWeight.normal,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (_isTelegramConnected())
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.shade100,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.check, size: 16, color: Colors.green),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'ATIVO',
-                                          style: TextStyle(
-                                            color: Colors.green,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            if (!_isTelegramConnected()) ...[
-                              const SizedBox(height: 20),
-                              const Divider(),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: _activateTelegram,
-                                  icon: const Icon(Icons.rocket_launch),
-                                  label: const Text('ATIVAR NOTIFICAÇÕES AGORA'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF0088cc), // Telegram Blue
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    elevation: 2,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Você será redirecionado para o Telegram. Clique em "Começar" ou "/start" no bot.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[500],
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
+                    Divider(height: 1, indent: 64, color: isDark ? Colors.white10 : Colors.black12),
+                    SwitchListTile(
+                      secondary: Icon(Icons.home_work_rounded, color: colorScheme.primary),
+                      title: const Text('Apenas Vagas Remotas'),
+                      value: userData?['isRemote'] ?? false,
+                      onChanged: (val) => _updatePreferences(
+                        userData?['keyword'] ?? '',
+                        userData?['location'] ?? '',
+                        val,
                       ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 32),
+
+              // CV Section
+              Text(
+                'Seu Perfil Profissional',
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: Icon(Icons.description_rounded, color: colorScheme.primary),
+                      title: const Text('Currículo (PDF)'),
+                      subtitle: Text(_extractedCVText != null ? 'Currículo Processado' : 'Ainda não enviado'),
+                      trailing: OutlinedButton.icon(
+                        onPressed: _pickAndUploadCV,
+                        icon: const Icon(Icons.upload_file_rounded, size: 18),
+                        label: const Text('Upload PDF'),
+                      ),
+                    ),
+                    if (_extractedCVText != null) ...[
+                      Divider(height: 1, indent: 64, color: isDark ? Colors.white10 : Colors.black12),
+                      ListTile(
+                        leading: Icon(Icons.edit_note_rounded, color: colorScheme.primary),
+                        title: const Text('Editar Texto do Currículo'),
+                        subtitle: const Text('Ajuste as informações extraídas pela IA'),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: _showEditCVDialog,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // Telegram Integration
+              Text(
+                'Avisos Instantâneos',
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0088CC).withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.telegram, color: Color(0xFF0088CC), size: 32),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Bot do Telegram',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              _isTelegramConnected() 
+                                ? 'Recebendo vagas em tempo real' 
+                                : 'Ative para receber vagas no celular',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_isTelegramConnected())
+                        TextButton(
+                          onPressed: _disconnectTelegram,
+                          child: const Text('DESATIVAR', style: TextStyle(color: Colors.red)),
+                        )
+                      else
+                        ElevatedButton(
+                          onPressed: _activateTelegram,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0088CC),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('ATIVAR'),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 48),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  int _calculateProfileCompletion() {
+    int percentage = 0;
+    final userData = _user?['user'];
+    
+    // Keyword (33%)
+    final keyword = userData?['keyword'] as String?;
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      percentage += 33;
+    }
+    
+    // Location (33%)
+    final location = userData?['location'] as String?;
+    if (location != null && location.trim().isNotEmpty) {
+      percentage += 33;
+    }
+    
+    // CV Text (34%)
+    if (_extractedCVText != null && _extractedCVText!.trim().isNotEmpty) {
+      percentage += 34;
+    }
+    
+    return percentage;
+  }
+
+  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      color: color.withOpacity(0.05),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: color.withOpacity(0.1)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

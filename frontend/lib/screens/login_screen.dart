@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../widgets/responsive_layout.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -47,103 +48,116 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Logo e Título
-              const Icon(
-                Icons.work_outline_rounded,
-                size: 64,
-                color: Color(0xFF0D47A1),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'JobMatch AI',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0D47A1),
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Encontre sua vaga ideal automaticamente',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-              ),
-              const SizedBox(height: 48),
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-              // Card de Login
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'Bem-vindo de volta!',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      TextField(
-                        controller: _emailController,
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          prefixIcon: Icon(Icons.email_outlined),
-                        ),
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _passwordController,
-                        decoration: const InputDecoration(
-                          labelText: 'Senha',
-                          prefixIcon: Icon(Icons.lock_outline),
-                        ),
-                        obscureText: true,
-                        onSubmitted: (_) => _login(),
-                      ),
-                      const SizedBox(height: 24),
-                      _isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : ElevatedButton(
-                              onPressed: _login,
-                              child: const Text('ENTRAR'),
-                            ),
-                    ],
+    return Scaffold(
+      body: ResponsiveLayout(
+        maxWidth: 500,
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: 48.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Logo e Título
+                Icon(
+                  Icons.work_history_rounded,
+                  size: 80,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'JobMatch AI',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                    letterSpacing: -0.5,
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              
-              // Link para Cadastro
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Não tem uma conta?',
-                    style: TextStyle(color: Colors.grey[600]),
+                const SizedBox(height: 12),
+                Text(
+                  'Sua carreira, potencializada por IA.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: theme.hintColor,
                   ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/register');
-                    },
-                    child: const Text('Cadastre-se agora'),
+                ),
+                const SizedBox(height: 48),
+
+                // Card de Login
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Bem-vindo!',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 32),
+                        TextField(
+                          controller: _emailController,
+                          decoration: const InputDecoration(
+                            labelText: 'E-mail',
+                            prefixIcon: Icon(Icons.alternate_email_rounded),
+                          ),
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                        ),
+                        const SizedBox(height: 20),
+                        TextField(
+                          controller: _passwordController,
+                          decoration: const InputDecoration(
+                            labelText: 'Senha',
+                            prefixIcon: Icon(Icons.lock_person_rounded),
+                          ),
+                          obscureText: true,
+                          onSubmitted: (_) => _login(),
+                        ),
+                        const SizedBox(height: 32),
+                        _isLoading
+                            ? const Center(child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8.0),
+                              child: CircularProgressIndicator(),
+                            ))
+                            : ElevatedButton(
+                                onPressed: _login,
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 20),
+                                ),
+                                child: const Text('ENTRAR'),
+                              ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 32),
+                
+                // Link para Cadastro
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Ainda não tem conta?',
+                      style: TextStyle(color: theme.hintColor),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/register');
+                      },
+                      child: const Text('Cadastre-se grátis'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
