@@ -107,3 +107,4 @@ backend/openclaw-identity/
 ollama/data/
 backend/uploads/
 frontend/.vite/
+.agent/skills/flutter/SKILL.md

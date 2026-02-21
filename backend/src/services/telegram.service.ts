@@ -32,7 +32,7 @@ export class TelegramService {
       const startPayload = ctx.payload; // Extract payload from /start <payload>
       console.log('📦 Payload recebido:', startPayload);
       console.log('👤 Chat ID:', ctx.chat.id);
-      
+
       if (startPayload) {
         const userId = startPayload;
         console.log(`🔗 Tentando vincular usuário ${userId} ao chat ${ctx.chat.id}`);
@@ -56,82 +56,106 @@ export class TelegramService {
      * - Envia notificação formatada para cada vaga encontrada
      */
     this.bot.command('vagas', async (ctx) => {
-        const chatId = ctx.chat.id;
-        try {
-            const user = await prisma.user.findFirst({
-                where: { telegramChatId: BigInt(chatId) }
-            });
+      const chatId = ctx.chat.id;
+      try {
+        const user = await prisma.user.findFirst({
+          where: { telegramChatId: BigInt(chatId) }
+        });
 
-            if (!user || !user.keyword) {
-                return ctx.reply('Você ainda não definiu suas preferências de busca (palavra-chave). Configure no aplicativo.');
-            }
-
-            const remoteText = user.isRemote ? '(Remoto)' : '';
-            await ctx.reply(`Buscando vagas no banco para: ${user.keyword} ${remoteText}... 🔍`);
-
-            // Monta o filtro de busca dinâmico
-            const whereClause: any = {
-                title: {
-                    contains: user.keyword,
-                    mode: 'insensitive'
-                }
-            };
-
-            // Se o usuário quer remoto, reforça o filtro.
-            // Nota: O Scraper global já prioriza vagas remotas, mas aqui filtramos o que tem no banco.
-            // Se o usuário NÃO exige remoto, trazemos qualquer coisa que combine com a keyword.
-            if (user.isRemote) {
-                // Como o scraper global já foca em 'remote', a maioria das vagas deve ser remota.
-                // Mas podemos reforçar verificando se a localização ou descrição indicam isso,
-                // ou simplesmente confiar que o scraper global só traz remotas se configurado assim.
-                // Dado que o scraper global agora é HARDCODED para remoto (regra 1), 
-                // todas as vagas no banco DEVEM ser remotas. Então esse filtro é redundante mas seguro.
-            }
-
-            const jobs = await prisma.job.findMany({
-                where: whereClause,
-                orderBy: {
-                    createdAt: 'desc' 
-                },
-                take: 5
-            });
-
-            if (!jobs || jobs.length === 0) {
-                ctx.reply(`Não encontrei vagas recentes no banco para "${user.keyword}". Iniciando busca no LinkedIn agora... 🕵️‍♂️\nIsso pode levar alguns minutos. Eu te aviso quando terminar!`);
-                
-                // Trigger scraper asynchronously
-                this.scraperService.scrapeJobs({
-                    keyword: user.keyword,
-                    remote: user.isRemote,
-                    last24h: true
-                }).then((result) => {
-                    if (result.count > 0) {
-                        ctx.reply(`✅ Busca finalizada! Encontrei ${result.count} novas vagas para "${user.keyword}".\nUse /vagas para visualizá-las.`);
-                    } else {
-                        ctx.reply(`⚠️ Busca finalizada para "${user.keyword}", mas não encontrei novas vagas no momento.`);
-                    }
-                }).catch((err) => {
-                    console.error(`[Telegram] Erro ao executar scraper gatilho para ${user.keyword}:`, err);
-                    ctx.reply(`❌ Ocorreu um erro ao tentar buscar vagas novas para "${user.keyword}". Tente novamente mais tarde.`);
-                });
-
-                return;
-            }
-
-            for (const job of jobs) {
-                const score = this.calculateMatchScore(job, user);
-                await this.sendJobNotification(chatId, {
-                    title: job.title,
-                    company: job.company,
-                    location: job.location,
-                    url: job.jobUrl,
-                    description: job.description || undefined
-                }, score);
-            }
-        } catch (error) {
-            console.error('Erro ao buscar vagas:', error);
-            await ctx.reply('Ocorreu um erro ao buscar as vagas.');
+        if (!user || !user.keyword) {
+          return ctx.reply('Você ainda não definiu suas preferências de busca (palavra-chave). Configure no aplicativo.');
         }
+
+        const keywords = user.keyword.split(',').map(k => k.trim()).filter(k => k.length > 0);
+        const remoteText = user.isRemote ? '(Remoto)' : '';
+        await ctx.reply(`Buscando vagas no banco para: ${keywords.join(', ')} ${remoteText}... 🔍`);
+
+        // Monta o filtro de busca dinâmico com OR para múltiplas keywords
+        const whereClause: any = {
+          OR: keywords.map(kw => ({
+            title: {
+              contains: kw,
+              mode: 'insensitive'
+            }
+          }))
+        };
+
+        const jobs = await prisma.job.findMany({
+          where: whereClause,
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 5
+        });
+
+        if (!jobs || jobs.length === 0) {
+          ctx.reply(`Não encontrei vagas recentes no banco para "${user.keyword}". Iniciando busca no LinkedIn agora... 🕵️‍♂️\nIsso pode levar alguns minutos. Eu te aviso quando terminar!`);
+
+          // Trigger scraper asynchronously for each keyword
+          Promise.all(keywords.map(kw =>
+            this.scraperService.scrapeJobs({
+              keyword: kw,
+              remote: user.isRemote,
+              last24h: true
+            })
+          )).then((results) => {
+            const totalNewJobs = results.reduce((acc, res) => acc + res.count, 0);
+            if (totalNewJobs > 0) {
+              ctx.reply(`✅ Busca finalizada! Encontrei ${totalNewJobs} novas vagas para seus interessses.\nUse /vagas para visualizá-las.`);
+            } else {
+              ctx.reply(`⚠️ Busca finalizada, mas não encontrei novas vagas no momento.`);
+            }
+          }).catch((err) => {
+            console.error(`[Telegram] Erro ao executar scraper gatilho:`, err);
+            ctx.reply(`❌ Ocorreu um erro ao tentar buscar vagas novas. Tente novamente mais tarde.`);
+          });
+
+          return;
+        }
+
+        for (const job of jobs) {
+          const score = this.calculateMatchScore(job, user);
+          await this.sendJobNotification(chatId, {
+            title: job.title,
+            company: job.company,
+            location: job.location,
+            url: job.jobUrl,
+            description: job.description || undefined
+          }, score);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar vagas:', error);
+        await ctx.reply('Ocorreu um erro ao buscar as vagas.');
+      }
+    });
+
+    /**
+     * Fluxo do comando /sair:
+     * - Identifica o usuário pelo telegramChatId (chat atual)
+     * - Define telegramChatId como null no banco
+     * - Confirma ao usuário que as notificações foram desativadas
+     */
+    this.bot.command('sair', async (ctx) => {
+      const chatId = ctx.chat.id;
+      try {
+        const user = await prisma.user.findFirst({
+          where: { telegramChatId: BigInt(chatId) }
+        });
+
+        if (!user) {
+          return ctx.reply('Este chat não está vinculado a nenhuma conta.');
+        }
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { telegramChatId: null }
+        });
+
+        await ctx.reply('Você desconectou sua conta. Não enviaremos mais notificações de vagas por aqui. Para reativar, use o aplicativo.');
+      } catch (error) {
+        console.error('Erro ao desconectar usuário no Telegram:', error);
+        await ctx.reply('Ocorreu um erro ao processar sua solicitação de saída.');
+      }
     });
   }
 
@@ -145,30 +169,37 @@ export class TelegramService {
   private calculateMatchScore(job: any, user: any): number {
     let score = 7; // Base score for keyword match (since it passed the DB filter)
 
-    // Bonus for exact title match (ignoring case)
-    if (job.title.toLowerCase().includes(user.keyword.toLowerCase())) {
-        score += 1;
+    // Desmembra keywords para validar match individual
+    const keywords = user.keyword.split(',').map((k: string) => k.trim().toLowerCase()).filter((k: string) => k.length > 0);
+
+    // Bonus if title contains ANY of the keywords
+    const titleMatch = keywords.some((kw: string) => job.title.toLowerCase().includes(kw));
+    if (titleMatch) {
+      score += 1;
     }
-    
-    // Bonus if description contains keyword again (relevance)
-    if (job.description && job.description.toLowerCase().includes(user.keyword.toLowerCase())) {
+
+    // Bonus if description contains ANY of the keywords
+    if (job.description) {
+      const descMatch = keywords.some((kw: string) => job.description.toLowerCase().includes(kw));
+      if (descMatch) {
         score += 1;
+      }
     }
 
     // Bonus for remote/location match
     if (user.isRemote) {
-        if (job.location.toLowerCase().includes('remoto') || 
-            job.location.toLowerCase().includes('remote') || 
-            job.location.toLowerCase().includes('híbrido') ||
-            job.description?.toLowerCase().includes('remoto')) {
-            score += 1;
-        }
+      if (job.location.toLowerCase().includes('remoto') ||
+        job.location.toLowerCase().includes('remote') ||
+        job.location.toLowerCase().includes('híbrido') ||
+        job.description?.toLowerCase().includes('remoto')) {
+        score += 1;
+      }
     }
 
     // Random variation to make it look organic if it's too static (optional, but keeps it from being all 10s)
     // Only if score is already high
     if (score >= 9) {
-        // keep it high
+      // keep it high
     }
 
     return Math.min(score, 10);
@@ -218,9 +249,9 @@ export class TelegramService {
     `.trim();
 
     if (jobData.description) {
-        // Truncate description to avoid message too long errors
-        const desc = jobData.description.length > 300 ? jobData.description.substring(0, 300) + '...' : jobData.description;
-        message += `\n\n📝 ${desc}`;
+      // Truncate description to avoid message too long errors
+      const desc = jobData.description.length > 300 ? jobData.description.substring(0, 300) + '...' : jobData.description;
+      message += `\n\n📝 ${desc}`;
     }
 
     message += `\n\n[Ver Vaga](${jobData.url})`;

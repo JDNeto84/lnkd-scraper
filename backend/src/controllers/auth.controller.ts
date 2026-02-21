@@ -23,29 +23,33 @@ export class AuthController {
   async me(request: FastifyRequest, reply: FastifyReply) {
     const userId = request.user?.id;
     if (!userId) {
-        return reply.status(401).send({ message: 'Unauthorized' });
+      return reply.status(401).send({ message: 'Unauthorized' });
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
+      include: {
+        userCV: true
+      }
     });
-    
+
     if (!user) {
-        return reply.status(404).send({ message: 'User not found' });
+      return reply.status(404).send({ message: 'User not found' });
     }
 
     // Convert BigInt to string manually to satisfy Zod schema
-    return reply.send({ 
-        user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            plan: user.plan,
-            telegramChatId: user.telegramChatId ? user.telegramChatId.toString() : null,
-            keyword: user.keyword,
-            location: user.location,
-            isRemote: user.isRemote
-        }
+    return reply.send({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        plan: user.plan,
+        telegramChatId: user.telegramChatId ? user.telegramChatId.toString() : null,
+        keyword: user.keyword,
+        location: user.location,
+        isRemote: user.isRemote,
+        extractedText: user.userCV?.content || null
+      }
     });
   }
 }

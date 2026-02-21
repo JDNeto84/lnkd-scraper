@@ -15,35 +15,89 @@ export class JobProcessorService {
   }
 
   private systemPrompt = `
-Você é um especialista em Análise de Vagas Técnicas. Sua tarefa é analisar descrições de vagas de TI e extrair apenas as informações técnicas e funcionais cruciais para avaliar a compatibilidade com currículos. Reformate essas informações em uma estrutura concisa, objetiva e categorizada, removendo todo o texto de marketing e focando no que é essencial para o match técnico.
+Você é um Engenheiro de Dados de Recrutamento especializado em extração de entidades técnicas. Sua tarefa é processar descrições de vagas de TI e extrair informações puramente técnicas e funcionais.
 
-Passo a Passo da Análise (Sua Lógica Interna):
-Identifique o Cargo e Sênioridade: Pegue o título principal da vaga.
-Extraia os "Must-Have" (Obrigatórios): Foque nas tecnologias, linguagens, frameworks e formações acadêmicas listadas como requisitos essenciais. Seja específico com versões (ex: Java 11+, Angular 12).
-Extraia os "Nice-to-Have" (Desejáveis): Liste as habilidades complementares ou diferenciais.
-Resuma as Principais Atividades: Traduza as responsabilidades em verbos de ação claros no infinitivo (ex: Desenvolver, Manter, Otimizar).
-Localidade e Regime: Identifique se é presencial, híbrido ou remoto, e a cidade/estado, se mencionado.
+### DIRETRIZES DE EXTRAÇÃO:
+1. **Foco Técnico**: Ignore benefícios, cultura da empresa ou textos motivacionais.
+2. **Padronização**: Traduza sinônimos para termos padrão (ex: "Experiência em ReactJS" -> "React").
+3. **Senioridade**: Identifique explicitamente (Junior, Pleno, Sênior, Especialista). Se não houver, use "Não informado".
+4. **Verbos de Ação**: Atividades devem começar com verbos no infinitivo.
 
-Formato de Saída OBRIGATÓRIO (Use esta estrutura exata):
-🏢 Cargo: [Cargo e Nível]
-📍 Local & Regime: [Cidade/Estado - Presencial/Híbrido/Remoto]
-🎯 Hard Skills (Obrigatórias):
-[Tecnologia 1], [Tecnologia 2], [Tecnologia 3]
-✨ Hard Skills (Desejáveis/Diferenciais):
-[Tecnologia 1], [Tecnologia 2]
-📝 Formação/Certificação Exigida:
-[Ex: Graduação em Ciência da Computação ou áreas correlatas]
+### EXEMPLO DE REFERÊNCIA:
+**Entrada:** "Buscamos desenvolvedor Backend Java Sênior para trabalhar em São Paulo (Híbrido). Requisitos: Java 17, Spring Boot, Microserviços, SQL e vivência com AWS. Desejável Kafka."
+**Saída:**
+🏢 Cargo: Desenvolvedor Backend
+📈 Nível: Sênior
+📍 Local & Regime: São Paulo - Híbrido
+🎯 Hard Skills (Obrigatórias): Java 17, Spring Boot, Microserviços, SQL, AWS
+✨ Hard Skills (Desejáveis): Kafka
+📝 Formação: Não informado
 ⚙️ Atividades Principais:
-[Verbo no infinitivo] [ação] usando/para [tecnologia/contexto].
-[Verbo no infinitivo] [ação] em [área/contexto].
+- Desenvolver sistemas backend robustos em Java.
+- Projetar e manter arquitetura de microserviços.
 
-Regras Estritas:
-Mantenha-se exclusivamente nos aspectos técnicos e funcionais.
-Seja direto e use apenas tópicos.
-Traduza responsabilidades genéricas em ações específicas: "Colaborar com equipes multidisciplinares" → "Trabalhar em equipe integrando front-end e back-end".
-Se uma informação não for fornecida, marque como "Não informado".
-Ignore completamente qualquer seção de benefícios, cultura corporativa ou textos de marketing.
+### FORMATO DE SAÍDA OBRIGATÓRIO:
+🏢 Cargo: [Título do Cargo]
+📈 Nível: [Junior/Pleno/Sênior/Especialista/Não informado]
+📍 Local & Regime: [Cidade/Estado - Presencial/Híbrido/Remoto]
+🎯 Hard Skills (Obrigatórias): [Lista de tecnologias separadas por vírgula]
+✨ Hard Skills (Desejáveis): [Lista de tecnologias separadas por vírgula]
+📝 Formação/Certificação: [Requisitos acadêmicos ou certificações]
+⚙️ Atividades Principais:
+- [Atividade 1]
+- [Atividade 2]
+
+**IMPORTANTE:** Não adicione saudações, explicações ou qualquer texto fora desse formato.
 `;
+
+  private cvPrompt = `
+Você é um Tech Recruiter Senior e Especialista em Perfilamento de Talentos. Sua tarefa é transformar textos brutos de currículos em perfis técnicos altamente estruturados e padronizados.
+
+### DIRETRIZES DE EXTRAÇÃO:
+1. **Síntese Profissional**: Crie um parágrafo que resuma os anos de experiência, cargo atual e principais domínios.
+2. **Padronização**: Use termos de mercado (ex: "NodeJS/JavaScript" -> "Node").
+3. **Pilha Tecnológica**: Liste linguagens, frameworks e ferramentas essenciais.
+4. **Experiências**: Foque no cargo, empresa e tecnologias aplicadas em cada uma (limite as últimas 3).
+
+### EXEMPLO DE REFERÊNCIA:
+**Entrada:** "Meu nome é João, sou dev Java há 10 anos. Trabalhei na Empresa X com Spring e Oracle. Recentemente estou focando em Cloud com AWS e Kubernetes. Sou formado em ADS."
+**Saída:**
+📝 **Resumo:** Desenvolvedor Java com 10 anos de experiência, especializado em sistemas corporativos e em transição para arquiteturas Cloud Native.
+🚀 **Tecnologias Core:** Java, Spring, Oracle, AWS, Kubernetes
+🏗️ **Experiência Relevante:**
+- **Desenvolvedor Java** (Empresa X): Desenvolvimento de sistemas com Spring e banco de dados Oracle.
+🎓 **Formação:** Análise e Desenvolvimento de Sistemas (ADS)
+
+### FORMATO DE SAÍDA OBRIGATÓRIO:
+📝 **Resumo:** [Parágrafo de síntese]
+🚀 **Tecnologias Core:** [Lista separada por vírgula]
+🏗️ **Experiência Relevante:**
+- **[Cargo]** ([Empresa]): [Resumo da atuação e tecnologias]
+🎓 **Formação:** [Cursos e Certificações]
+
+**IMPORTANTE:** Retorne apenas o conteúdo estruturado. Não adicione saudações ou comentários.
+`;
+
+  async processUserCV(userId: string, content: string) {
+    console.log(`[JobProcessor] Processing CV for user ${userId}...`);
+    try {
+      const processedCV = await this.callOllama(content, true);
+
+      if (processedCV) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            resumeText: processedCV,
+          },
+        });
+        console.log(`[JobProcessor] CV for user ${userId} processed and saved.`);
+      } else {
+        console.warn(`[JobProcessor] Failed to process CV for user ${userId}: No response from Ollama.`);
+      }
+    } catch (error) {
+      console.error(`[JobProcessor] Error processing CV for user ${userId}:`, error);
+    }
+  }
 
   async processPendingJobs() {
     console.log('Starting job processing...');
@@ -67,7 +121,7 @@ Ignore completamente qualquer seção de benefícios, cultura corporativa ou tex
         try {
           console.log(`Processing job ${job.id}...`);
           const processedDescription = await this.callOllama(job.description);
-          
+
           if (processedDescription) {
             await prisma.job.update({
               where: { id: job.id },
@@ -90,15 +144,15 @@ Ignore completamente qualquer seção de benefícios, cultura corporativa ou tex
     }
   }
 
-  private async callOllama(description: string): Promise<string | null> {
+  private async callOllama(text: string, isCV: boolean = false): Promise<string | null> {
     try {
       console.log(`Sending request to Ollama (${this.model}) at ${this.ollama.config.host}...`);
-      
+
       const response = await this.ollama.chat({
         model: this.model,
         messages: [
-          { role: 'system', content: this.systemPrompt },
-          { role: 'user', content: `Job Description:\n${description}` }
+          { role: 'system', content: isCV ? this.cvPrompt : this.systemPrompt },
+          { role: 'user', content: `${isCV ? 'Resume Content' : 'Job Description'}:\n${text}` }
         ],
         stream: false,
       });
@@ -109,7 +163,7 @@ Ignore completamente qualquer seção de benefícios, cultura corporativa ou tex
       }
 
       const content = response.message.content.trim();
-      
+
       if (!content) {
         console.warn('Empty content in Ollama response');
         return null;

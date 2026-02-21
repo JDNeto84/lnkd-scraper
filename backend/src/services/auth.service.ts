@@ -48,6 +48,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         plan: user.plan,
+        location: user.location,
       },
     };
   }

@@ -81,7 +81,7 @@ app.get('/api/scrape', async (request: any, reply) => {
   };
   const last24hFlag = last24h !== 'false';
   const remoteFlag = remote === 'true';
-  
+
   try {
     const result = await scraper.scrapeJobs({
       keyword,
@@ -113,23 +113,23 @@ app.post('/api/process-jobs', async (request, reply) => {
 
 // Rota para listar vagas (API Jobs)
 app.get('/api/jobs', async (request: any, reply) => {
-    const { keyword, location, page } = request.query as { keyword?: string, location?: string, page?: string };
+  const { keyword, location, page } = request.query as { keyword?: string, location?: string, page?: string };
 
-    const jobs = await prisma.job.findMany({
-        where: {
-            title: { contains: keyword || '', mode: 'insensitive' },
-            location: { contains: location || '', mode: 'insensitive' }
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 20
-    });
+  const jobs = await prisma.job.findMany({
+    where: {
+      title: { contains: keyword || '', mode: 'insensitive' },
+      location: { contains: location || '', mode: 'insensitive' }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 20
+  });
 
-    return jobs;
+  return jobs;
 });
 
 // Inicialização de serviços auxiliares compartilhados
 const scraperService = new ScraperService();
-const jobProcessorService = new JobProcessorService();
+export const jobProcessorService = new JobProcessorService();
 const telegramService = process.env.TELEGRAM_TOKEN ? new TelegramService(process.env.TELEGRAM_TOKEN, scraperService) : null;
 
 // Inicializa o bot do Telegram, caso exista TELEGRAM_TOKEN configurado
@@ -151,7 +151,7 @@ cron.schedule('*/15 * * * *', async () => {
     // 1) Executa scraping baseado nas keywords dos usuários
     // Busca keywords únicas na tabela User e executa uma busca para cada
     app.log.info(`Scraping jobs based on user keywords...`);
-    
+
     await scraperService.scrapeForUsers();
 
     // 2) Limpa vagas antigas (mais de 25h) conforme regra de negócio

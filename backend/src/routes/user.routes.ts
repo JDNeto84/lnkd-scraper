@@ -32,7 +32,7 @@ export async function userRoutes(app: FastifyInstance) {
       body: telegramSetupSchema,
       response: {
         200: z.object({
-            message: z.string()
+          message: z.string()
         })
       }
     }
@@ -58,4 +58,17 @@ export async function userRoutes(app: FastifyInstance) {
       }
     }
   }, userController.updatePreferences);
+
+  app.withTypeProvider<ZodTypeProvider>().post('/users/telegram-disconnect', {
+    preHandler: [authenticateJWT],
+    schema: {
+      tags: ['Users'],
+      summary: 'Disconnect Telegram Chat ID',
+      response: {
+        200: z.object({
+          message: z.string()
+        })
+      }
+    }
+  }, userController.disconnectTelegram);
 }

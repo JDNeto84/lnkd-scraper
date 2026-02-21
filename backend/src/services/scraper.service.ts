@@ -29,7 +29,7 @@ export class ScraperService {
     params.set('keywords', keyword);
     params.set('location', location);
     params.set('geoId', '106057199'); // Brasil
-    
+
     // Filtros opcionais baseados nas preferências do usuário:
     if (options?.last24h) {
       params.set('f_TPR', 'r86400'); // Últimas 24 horas
@@ -43,7 +43,7 @@ export class ScraperService {
     if (options?.page) {
       params.set('start', (options.page * 25).toString());
     }
-    
+
     params.set('origin', 'JOB_SEARCH_PAGE_SEARCH_BUTTON');
     params.set('refresh', 'true');
 
@@ -71,14 +71,15 @@ export class ScraperService {
       }
     });
 
-    // Filtra nulos, vazios e cria lista única
+    // Filtra nulos, vazios, desmembra por vírgula e cria lista única de termos limpos
     const distinctKeywords = [...new Set(
       users
-        .map(u => u.keyword?.trim())
-        .filter((k): k is string => !!k && k.length > 0)
+        .flatMap(u => (u.keyword || '').split(',')) // Desmembra "Java, C#" em ["Java", " C#"]
+        .map(k => k.trim())
+        .filter(k => k.length > 0)
     )];
 
-    console.log(`[Scraper] Encontradas ${distinctKeywords.length} keywords únicas de usuários: ${distinctKeywords.join(', ')}`);
+    console.log(`[Scraper] Encontrados ${distinctKeywords.length} termos individuais para busca: ${distinctKeywords.join(', ')}`);
 
     // 2. Se não houver keywords, faz busca padrão (fallback)
     if (distinctKeywords.length === 0) {
@@ -102,7 +103,7 @@ export class ScraperService {
           last24h: true,
           remote: true
         });
-        
+
         // Pausa entre keywords para não sobrecarregar o browser/LinkedIn
         await new Promise(resolve => setTimeout(resolve, 5000));
       } catch (error) {
@@ -157,15 +158,15 @@ export class ScraperService {
       try {
         page = await browser.newPage();
         await page.setViewportSize({ width: 1280, height: 800 });
-        
+
         // Navega e espera apenas o DOM carregar (mais rápido e evita timeouts)
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
         // Espera explícita pela lista de vagas para garantir carregamento
         try {
-            await page.waitForSelector('ul.jobs-search__results-list', { timeout: 10000 });
+          await page.waitForSelector('ul.jobs-search__results-list', { timeout: 10000 });
         } catch (e) {
-            console.warn(`[Scraper] Timeout esperando lista de vagas na pág ${pageNum + 1}`);
+          console.warn(`[Scraper] Timeout esperando lista de vagas na pág ${pageNum + 1}`);
         }
 
         // Scroll suave para disparar o carregamento de mais itens (Infinite Scroll)
@@ -203,7 +204,7 @@ export class ScraperService {
 
         // Verifica duplicata na execução atual
         if (cleanUrl && seenUrls.has(cleanUrl)) {
-            return; // Pula duplicata
+          return; // Pula duplicata
         }
 
         if (title && cleanUrl) {
@@ -241,25 +242,25 @@ export class ScraperService {
    * - Controlar quantas vagas são processadas por execução
    */
   private async processBatch(jobs: any[], browser: Browser) {
-      let newCount = 0;
-      const jobsToProcess = jobs.slice(0, 20); // Limitado a 20 por página para evitar bans excessivos
-      const BATCH_SIZE = 3;
+    let newCount = 0;
+    const jobsToProcess = jobs.slice(0, 20); // Limitado a 20 por página para evitar bans excessivos
+    const BATCH_SIZE = 3;
 
-      for (let i = 0; i < jobsToProcess.length; i += BATCH_SIZE) {
-          const batch = jobsToProcess.slice(i, i + BATCH_SIZE);
-          console.log(`[Scraper] Processando lote ${Math.floor(i / BATCH_SIZE) + 1} de ${Math.ceil(jobsToProcess.length / BATCH_SIZE)}`);
-          
-          const results = await Promise.all(
-              batch.map(job => this.processJob(job, browser))
-          );
-          
-          newCount += results.filter(Boolean).length;
-          
-          if (i + BATCH_SIZE < jobsToProcess.length) {
-              await new Promise(r => setTimeout(r, 3000));
-          }
+    for (let i = 0; i < jobsToProcess.length; i += BATCH_SIZE) {
+      const batch = jobsToProcess.slice(i, i + BATCH_SIZE);
+      console.log(`[Scraper] Processando lote ${Math.floor(i / BATCH_SIZE) + 1} de ${Math.ceil(jobsToProcess.length / BATCH_SIZE)}`);
+
+      const results = await Promise.all(
+        batch.map(job => this.processJob(job, browser))
+      );
+
+      newCount += results.filter(Boolean).length;
+
+      if (i + BATCH_SIZE < jobsToProcess.length) {
+        await new Promise(r => setTimeout(r, 3000));
       }
-      return { count: newCount };
+    }
+    return { count: newCount };
   }
 
   /**
@@ -271,37 +272,37 @@ export class ScraperService {
    * Retorna true se criou uma nova vaga, false caso contrário ou em erro.
    */
   private async processJob(job: any, browser: Browser): Promise<boolean> {
-      try {
-        const exists = await prisma.job.findUnique({
-            where: { jobUrl: job.jobUrl },
-        });
+    try {
+      const exists = await prisma.job.findUnique({
+        where: { jobUrl: job.jobUrl },
+      });
 
-        if (!exists) {
-            console.log(`[Scraper] Buscando detalhes para: ${job.title}`);
-            const description = await this.fetchJobDescription(browser, job.jobUrl);
+      if (!exists) {
+        console.log(`[Scraper] Buscando detalhes para: ${job.title}`);
+        const description = await this.fetchJobDescription(browser, job.jobUrl);
 
-            // Regra de Negócio: Ignorar vagas que exigem Inglês
-            if (description && /english|inglês/i.test(description)) {
-                console.log(`[Scraper] Vaga ignorada (Idioma Inglês detectado): ${job.title}`);
-                return false;
-            }
-
-            await prisma.job.create({
-            data: {
-                title: job.title,
-                company: job.company,
-                location: job.location,
-                postedDate: job.postedDate,
-                jobUrl: job.jobUrl,
-                description: description || 'Descrição indisponível no momento.',
-            },
-            });
-            return true;
+        // Regra de Negócio: Ignorar vagas que exigem Inglês
+        if (description && /english|inglês/i.test(description)) {
+          console.log(`[Scraper] Vaga ignorada (Idioma Inglês detectado): ${job.title}`);
+          return false;
         }
-      } catch (error) {
-          console.error(`[Scraper] Erro ao processar vaga ${job.title}:`, error);
+
+        await prisma.job.create({
+          data: {
+            title: job.title,
+            company: job.company,
+            location: job.location,
+            postedDate: job.postedDate,
+            jobUrl: job.jobUrl,
+            description: description || 'Descrição indisponível no momento.',
+          },
+        });
+        return true;
       }
-      return false;
+    } catch (error) {
+      console.error(`[Scraper] Erro ao processar vaga ${job.title}:`, error);
+    }
+    return false;
   }
 
   /**
@@ -333,8 +334,8 @@ export class ScraperService {
 
       const description = await page.evaluate(() => {
         const el = document.querySelector('.show-more-less-html__markup') ||
-                   document.querySelector('.description__text') ||
-                   document.querySelector('#job-details');
+          document.querySelector('.description__text') ||
+          document.querySelector('#job-details');
 
         if (!el) return null;
         return (el as HTMLElement).innerText.trim();
